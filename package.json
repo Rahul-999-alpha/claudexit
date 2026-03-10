@@ -1,6 +1,6 @@
 {
   "name": "claudexit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Export and migrate your Claude Desktop conversations",
   "author": "Rahul Daswani",
   "main": "./out/main/main.js",

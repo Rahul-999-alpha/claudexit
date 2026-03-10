@@ -17,11 +17,19 @@ class ClaudeAPI:
     def __init__(self, cookies: dict[str, str]):
         self.cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
         self.org_id = cookies.get("lastActiveOrg")
-        if not self.org_id:
-            raise RuntimeError("lastActiveOrg cookie not found")
+        # org_id will be resolved in verify_session if not in cookies
 
     async def close(self):
         pass
+
+    async def _resolve_org_id(self) -> str:
+        """Fetch the organization ID from the API."""
+        data = await self._request(f"{self.BASE}/organizations")
+        orgs = json.loads(data)
+        if not orgs:
+            raise RuntimeError("No organizations found for this account")
+        # Use the first org (most accounts have one)
+        return orgs[0]["uuid"]
 
     def _request_sync(self, url: str, accept: str = "application/json") -> bytes:
         """Make an authenticated GET request (sync, runs in thread pool)."""
@@ -44,8 +52,9 @@ class ClaudeAPI:
         return json.loads(data)
 
     async def verify_session(self) -> dict:
-        """Verify session is valid by fetching the conversation list."""
-        # Use chat_conversations instead of /organizations — more reliable
+        """Verify session is valid. Resolves org_id if missing."""
+        if not self.org_id:
+            self.org_id = await self._resolve_org_id()
         convos = await self._get("chat_conversations")
         return {"valid": True, "org_id": self.org_id, "conversation_count": len(convos)}
 
