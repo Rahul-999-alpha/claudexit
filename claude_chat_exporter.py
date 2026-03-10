@@ -16,6 +16,7 @@ Usage:
     python claude_chat_exporter.py --chat <uuid>         # Export a single chat
     python claude_chat_exporter.py --no-files            # Skip file downloads
     python claude_chat_exporter.py --no-projects         # Skip project knowledge
+    python claude_chat_exporter.py --migrate             # Generate migration prompt from export
 
 Output:
     ./claude_export/
@@ -312,6 +313,137 @@ def collect_files_from_conversation(conv: dict) -> list[dict]:
     return files
 
 
+def generate_migration_prompt(export_dir: str) -> str:
+    """Generate a migration prompt from an existing claudexit export.
+
+    Reads the export directory and produces a self-contained prompt that can
+    be pasted into a new Claude account to recreate the project structure,
+    upload knowledge documents, and provide conversation context.
+    """
+    export_path = Path(export_dir)
+
+    # Load projects
+    projects = []
+    projects_file = export_path / "projects.json"
+    if projects_file.exists():
+        with open(projects_file, "r", encoding="utf-8") as f:
+            projects = json.load(f)
+
+    # Load conversations index
+    conversations = []
+    convs_file = export_path / "conversations.json"
+    if convs_file.exists():
+        with open(convs_file, "r", encoding="utf-8") as f:
+            conversations = json.load(f)
+
+    lines = []
+
+    # --- Header ---
+    lines.append("# Claude Account Migration")
+    lines.append("")
+    lines.append("I'm migrating from another Claude account. Below is my complete")
+    lines.append("account structure — projects, knowledge documents, and conversation")
+    lines.append("history. Please help me recreate this setup on this new account.")
+    lines.append("")
+
+    # --- Instructions ---
+    lines.append("## What I Need You To Do")
+    lines.append("")
+    lines.append("1. **Create these projects** with their names and descriptions")
+    lines.append("2. **Note the knowledge documents** listed below — I will upload")
+    lines.append("   them as project knowledge files. The full content is included")
+    lines.append("   so you have context even before I upload them.")
+    lines.append("3. **Review the conversation summaries** so you have context about")
+    lines.append("   what we've discussed previously.")
+    lines.append("")
+
+    # --- Projects ---
+    lines.append("## Projects")
+    lines.append("")
+    if projects:
+        for p in projects:
+            name = p.get("name", "Untitled")
+            desc = p.get("description", "")
+            is_private = p.get("is_private", True)
+            created = p.get("created_at", "")[:10]
+            lines.append(f"### {name}")
+            lines.append(f"- **Description:** {desc or '(none)'}")
+            lines.append(f"- **Private:** {is_private}")
+            lines.append(f"- **Created:** {created}")
+            lines.append("")
+
+            # Knowledge docs for this project
+            proj_dir_name = sanitize_filename(name, 60)
+            knowledge_dir = export_path / proj_dir_name / "knowledge"
+            if knowledge_dir.is_dir():
+                doc_files = sorted(knowledge_dir.iterdir())
+                if doc_files:
+                    lines.append(f"#### Knowledge Documents ({len(doc_files)} files)")
+                    lines.append("")
+                    for doc_path in doc_files:
+                        lines.append(f"**`{doc_path.name}`**")
+                        lines.append("")
+                        try:
+                            content = doc_path.read_text(encoding="utf-8")
+                            # Include full content but wrap in collapsible block
+                            lines.append("<details>")
+                            lines.append(f"<summary>View content ({len(content)} chars)</summary>")
+                            lines.append("")
+                            lines.append(content)
+                            lines.append("")
+                            lines.append("</details>")
+                        except Exception:
+                            lines.append("*(content could not be read)*")
+                        lines.append("")
+            lines.append("---")
+            lines.append("")
+    else:
+        lines.append("*(No projects found)*")
+        lines.append("")
+
+    # --- Conversation History ---
+    lines.append("## Conversation History")
+    lines.append("")
+    lines.append("Summary of past conversations for context. Grouped by project.")
+    lines.append("")
+
+    # Group conversations by project
+    proj_uuid_to_name = {p["uuid"]: p["name"] for p in projects}
+    grouped: dict[str, list] = {"(No Project)": []}
+    for p in projects:
+        grouped[p["name"]] = []
+    for conv in conversations:
+        proj_uuid = conv.get("project_uuid")
+        if proj_uuid and proj_uuid in proj_uuid_to_name:
+            grouped.setdefault(proj_uuid_to_name[proj_uuid], []).append(conv)
+        else:
+            grouped["(No Project)"].append(conv)
+
+    for group_name, convs in grouped.items():
+        if not convs:
+            continue
+        lines.append(f"### {group_name}")
+        lines.append("")
+        lines.append(f"| # | Date | Model | Title | Summary |")
+        lines.append(f"|---|------|-------|-------|---------|")
+        for i, c in enumerate(convs, 1):
+            date = c.get("created_at", "")[:10]
+            model = c.get("model", "?")
+            # Shorten model name
+            model_short = model.replace("claude-", "").replace("-20250929", "").replace("-20251001", "").replace("-20251101", "")
+            name = c.get("name", "Untitled").replace("|", "/")
+            summary = (c.get("summary", "") or "").replace("|", "/").replace("\n", " ")[:150]
+            lines.append(f"| {i} | {date} | {model_short} | {name} | {summary} |")
+        lines.append("")
+
+    # --- Footer ---
+    lines.append("---")
+    lines.append("")
+    lines.append("*Generated by [claudexit](https://github.com/Rahul-999-alpha/claudexit)*")
+
+    return "\n".join(lines)
+
+
 def download_file_best_variant(api: ClaudeAPI, file_info: dict) -> tuple[bytes, str] | None:
     """Try to download a file using the best available variant."""
     file_uuid = file_info.get("file_uuid") or file_info.get("uuid")
@@ -379,7 +511,29 @@ def main():
         "--no-thinking", action="store_true",
         help="Exclude thinking/reasoning blocks from markdown output",
     )
+    parser.add_argument(
+        "--migrate", action="store_true",
+        help="Generate a migration prompt from an existing export (run --export first)",
+    )
     args = parser.parse_args()
+
+    # ---- Migration prompt mode (no API needed) ----
+    if args.migrate:
+        export_dir = Path(args.output)
+        if not (export_dir / "conversations.json").exists():
+            print(f"Error: No export found at {export_dir}/")
+            print(f"Run --export first, then run --migrate.")
+            sys.exit(1)
+        print(f"Generating migration prompt from {export_dir}...")
+        prompt = generate_migration_prompt(str(export_dir))
+        out_path = export_dir / "MIGRATION_PROMPT.md"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(prompt)
+        print(f"  Saved to {out_path}")
+        print(f"  Size: {len(prompt):,} characters")
+        print(f"\nPaste this file's contents into a new Claude account to recreate")
+        print(f"your project structure and provide conversation context.")
+        return
 
     # ---- Resolve Claude data directory ----
     claude_data_dir = os.path.join(os.environ.get("APPDATA", ""), "Claude")

@@ -1,6 +1,6 @@
-# Claude Desktop Chat Exporter
+# claudexit
 
-Export all conversations, projects, knowledge files, and uploaded files from the **Claude Desktop app** on Windows.
+Export all conversations, projects, knowledge files, and uploaded files from the **Claude Desktop app** on Windows. Includes account migration support.
 
 Works by reading the session cookies from the Electron app's local Chromium storage and calling the `claude.ai` internal API.
 
@@ -11,6 +11,7 @@ pip install -r requirements.txt
 
 python claude_chat_exporter.py              # List all chats (grouped by project)
 python claude_chat_exporter.py --export     # Export everything
+python claude_chat_exporter.py --migrate    # Generate migration prompt for a new account
 ```
 
 ## Requirements
@@ -52,6 +53,10 @@ python claude_chat_exporter.py --export --output my_backup
 
 # Adjust delay between API requests (default: 0.5s)
 python claude_chat_exporter.py --export --delay 1.0
+
+# Generate migration prompt from an existing export
+python claude_chat_exporter.py --migrate
+python claude_chat_exporter.py --migrate --output my_backup
 ```
 
 ## Output Structure
@@ -60,28 +65,58 @@ python claude_chat_exporter.py --export --delay 1.0
 claude_export/
   ├── conversations.json               # Index of all conversations
   ├── projects.json                     # Index of all projects
+  ├── MIGRATION_PROMPT.md               # Account migration prompt (--migrate)
   │
   ├── _no_project/                      # Chats not assigned to any project
   │   ├── json/
-  │   │   └── 2026-03-07_Becoming-a-Claude-ambassador_abc12345.json
+  │   │   └── 2026-01-15_Chat-title_abc12345.json
   │   ├── markdown/
-  │   │   └── 2026-03-07_Becoming-a-Claude-ambassador_abc12345.md
+  │   │   └── 2026-01-15_Chat-title_abc12345.md
   │   └── files/
   │       └── screenshot.png
   │
-  ├── FT/                               # Project folder
+  ├── My-Project/                       # Project folder
   │   ├── knowledge/                    # Project knowledge documents
-  │   │   ├── brand_identity.md
-  │   │   └── hiring_pipeline.md
+  │   │   ├── design_spec.md
+  │   │   └── api_reference.md
   │   ├── json/                         # Full conversation JSON
   │   ├── markdown/                     # Readable Markdown
   │   └── files/                        # Uploaded files (PDFs, images)
   │
-  ├── Matrimony/
-  │   └── ...
-  └── SDLC/
+  └── Another-Project/
       └── ...
 ```
+
+## Account Migration
+
+claudexit can generate a migration prompt that helps you recreate your account setup on a new Claude account.
+
+### How it works
+
+1. **Export** your current account:
+   ```bash
+   python claude_chat_exporter.py --export
+   ```
+
+2. **Generate** the migration prompt:
+   ```bash
+   python claude_chat_exporter.py --migrate
+   ```
+
+3. **Open** `claude_export/MIGRATION_PROMPT.md` and paste it into your new Claude account.
+
+### What the migration prompt includes
+
+- **Project structure** — names, descriptions, and settings for each project
+- **Knowledge documents** — full content of every knowledge doc, so the new account has complete context even before you re-upload them
+- **Conversation summaries** — a table of all past conversations with dates, models used, titles, and auto-generated summaries grouped by project
+- **Setup instructions** — tells Claude exactly what to create and in what order
+
+### What you'll need to do manually
+
+- **Re-upload knowledge files** to each project (the prompt tells Claude which files go where)
+- **Re-upload any files** referenced in conversations (PDFs, images — they're in the `files/` directories)
+- Artifacts cannot be migrated (see limitations below)
 
 ## What Gets Exported
 
@@ -102,7 +137,7 @@ claude_export/
 |------|--------|
 | **Artifacts** (interactive code, HTML, React components) | The API strips artifact source code server-side and replaces it with a placeholder. No known endpoint returns the original source. Artifacts are only rendered in the web app during the live session. |
 | **Deleted conversations** | Not returned by the API |
-| **Older conversations** | The API returns the most recent ~60 conversations visible in your sidebar. Older ones may have been auto-archived. |
+| **Older conversations** | The API returns conversations visible in your sidebar. Deleted or auto-archived conversations are not retrievable. |
 
 ## How It Works
 
@@ -129,21 +164,24 @@ claude_export/
 ### "unable to open database file"
 - The SQLite readonly mode should work even while the app is running. If you still get this error, try closing the Claude Desktop app first.
 
-### Only 60 conversations exported
-- The `claude.ai` API returns the most recent conversations visible in your sidebar (~60). This appears to be a server-side limit. Deleted or very old conversations may not be retrievable.
+### Not all conversations exported
+- The API returns conversations visible in your sidebar. Deleted or auto-archived conversations are not retrievable.
 
 ## Portability
 
-This script runs on any **Windows** machine with:
+| Platform | Status | Notes |
+|----------|--------|-------|
+| **Windows** | Supported | Uses DPAPI for Chromium cookie decryption |
+| **macOS** | Coming Soon | Requires Keychain integration for cookie decryption |
+| **Linux** | Coming Soon | Requires libsecret/GNOME Keyring for cookie decryption |
+
+**Windows requirements:**
 - Python 3.10+
 - The `cryptography` package
 - Claude Desktop app installed and logged in
-
-It does **not** work on macOS or Linux — those platforms use different credential stores (Keychain / libsecret) for Chromium cookie encryption.
 
 ## Security Notes
 
 - The script reads your Claude session cookie to make API calls. The cookie is only used locally and is not transmitted anywhere except to `claude.ai`.
 - Exported data may contain sensitive conversation content. Store exports securely.
-- The temporary cookie database copy is deleted immediately after reading.
 - No credentials or cookies are written to the export directory.
