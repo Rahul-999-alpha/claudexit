@@ -137,7 +137,7 @@ claudexit can generate a migration prompt that helps you recreate your account s
 |------|--------|
 | **Artifacts** (interactive code, HTML, React components) | The API strips artifact source code server-side and replaces it with a placeholder. No known endpoint returns the original source. Artifacts are only rendered in the web app during the live session. |
 | **Deleted conversations** | Not returned by the API |
-| **Older conversations** | The API returns conversations visible in your sidebar. Deleted or auto-archived conversations are not retrievable. |
+| **Older conversations** | The API returns conversations visible in your sidebar. There may be a server-side cap on how many are returned — not yet confirmed. Deleted or auto-archived conversations are not retrievable. |
 
 ## How It Works
 
@@ -165,7 +165,7 @@ claudexit can generate a migration prompt that helps you recreate your account s
 - The SQLite readonly mode should work even while the app is running. If you still get this error, try closing the Claude Desktop app first.
 
 ### Not all conversations exported
-- The API returns conversations visible in your sidebar. Deleted or auto-archived conversations are not retrievable.
+- The API returns conversations visible in your sidebar. There may be a server-side cap — not yet confirmed. Deleted or auto-archived conversations are not retrievable.
 
 ## Portability
 
