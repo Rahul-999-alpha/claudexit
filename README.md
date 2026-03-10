@@ -11,6 +11,7 @@ A polished Electron + React + FastAPI desktop app with a 5-step wizard. Designed
 ### Features
 
 - **One-click export** — Automatically detects your Claude Desktop installation and extracts session cookies
+- **Browser login fallback** — If auto-detect fails, log in through a browser window instead
 - **Full account export** — Conversations, projects, knowledge documents, memory, and uploaded files
 - **Live progress** — Real-time WebSocket progress tracking during export
 - **Multiple formats** — Export as JSON, Markdown, or both
@@ -181,8 +182,10 @@ The migration prompt includes your memory, project structure, knowledge document
 
 ## Troubleshooting
 
-- **"No sessionKey cookie found"** — Open the Claude Desktop app and make sure you're logged in.
-- **"HTTP Error 401 / 403"** — Your session has expired. Open Claude Desktop to refresh it, then try again.
+- **"Claude Desktop not found"** — Your install path may be non-standard. Use the **Login with Browser** button instead — it bypasses local cookie extraction entirely.
+- **"No sessionKey cookie found"** — Open the Claude Desktop app and make sure you're logged in, or use **Login with Browser**.
+- **"Session verification failed"** — Your session may have expired, or the `lastActiveOrg` cookie may be missing (claudexit auto-resolves this, but if it still fails, try **Login with Browser**).
+- **"HTTP Error 401 / 403"** — Your session has expired. Open Claude Desktop to refresh it, then try again. Or use **Login with Browser** for a fresh session.
 - **Not all conversations exported** — The API returns conversations visible in your sidebar. Deleted or auto-archived conversations are not retrievable.
 
 ## Portability

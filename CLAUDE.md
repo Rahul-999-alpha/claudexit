@@ -29,7 +29,8 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 
 - **Backend runs as subprocess**: Electron spawns `claudexit-backend.exe` (PyInstaller) on port 8020. In dev, runs `python -m uvicorn`.
 - **No database**: Pure export tool. State is in-memory only (cookies, API client, job progress).
-- **Cookie extraction**: DPAPI decryption of Chromium cookies from `%APPDATA%/Claude/`. Works while Claude Desktop is running (kills the Chromium Network Service subprocess to bypass exclusive file lock, copies the DB, service auto-restarts).
+- **Two auth methods**: (1) Auto-detect: DPAPI cookie extraction from Claude Desktop's Chromium data dir (searches 12 candidate paths across `%APPDATA%` and `%LOCALAPPDATA%`). Kills the Network Service subprocess to bypass exclusive file lock, copies the DB, service auto-restarts. (2) Browser login: Opens an Electron BrowserWindow to claude.ai/login, polls for `sessionKey` cookie, passes cookies directly to the backend.
+- **Org ID resolution**: The `lastActiveOrg` cookie may not exist on all installs. If missing, the API client auto-fetches the org ID from `GET /api/organizations`.
 - **Export pipeline**: Async background task with WebSocket progress streaming.
 - **Single-user desktop app**: No auth, no persistence, no multi-tenancy.
 
@@ -38,7 +39,8 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | /health | Backend ready check |
-| POST | /api/connect | Extract cookies, verify session |
+| POST | /api/connect | Extract cookies via DPAPI, verify session |
+| POST | /api/connect/cookies | Accept cookies directly (browser login) |
 | GET | /api/preview | List projects, conversations, memory |
 | POST | /api/export/start | Start background export job |
 | GET | /api/export/status/{job_id} | Poll progress |
@@ -70,6 +72,8 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 
 - **DPAPI**: Windows-only. The cookie extraction uses Windows CryptUnprotectData. Won't work on macOS/Linux.
 - **Chromium file lock**: Claude Desktop's Network Service holds an exclusive lock (no `FILE_SHARE_READ`) on the Cookies DB. The code kills the Network Service, copies the file, and Chromium auto-restarts it. Direct SQLite readonly mode and `shutil.copy2` both fail while the lock is held.
+- **Claude Desktop path varies**: Different install methods (Store, MSI, enterprise) put data in different paths. The code searches 12 candidates across `%APPDATA%` and `%LOCALAPPDATA%`. If auto-detect fails, the browser login fallback bypasses this entirely.
+- **`lastActiveOrg` cookie missing**: Some installs don't set this cookie. The API client auto-resolves the org ID from `GET /api/organizations` on first use.
 - **Cloudflare TLS fingerprinting**: `httpx` gets 403'd by Cloudflare on claude.ai. The API client uses `urllib.request` (via `asyncio.to_thread`) which has a compatible TLS fingerprint.
 - **FastAPI trailing slashes**: Use `@router.get("")` not `@router.get("/")` — the prefix adds the path.
 - **PyInstaller**: Must use `upx=False`. UPX corrupts DLLs on Windows.
