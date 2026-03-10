@@ -42,7 +42,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 Electron 34 (main process)
   ├── FastAPI backend (subprocess, port 8020)
   │   ├── DPAPI cookie extraction
-  │   ├── Async Claude API client (httpx)
+  │   ├── Async Claude API client (urllib)
   │   ├── Export pipeline with progress callbacks
   │   └── WebSocket streaming
   └── React 18 frontend (Vite)
@@ -54,7 +54,7 @@ Electron 34 (main process)
 ### Tech Stack
 
 - **Frontend:** React 18, TypeScript, Vite 6, Tailwind CSS, Zustand, Lucide Icons
-- **Backend:** FastAPI, httpx (async), WebSocket, DPAPI, cryptography
+- **Backend:** FastAPI, urllib (async via thread pool), WebSocket, DPAPI, cryptography
 - **Desktop:** Electron 34, electron-vite, electron-builder (NSIS)
 - **Build:** PyInstaller (backend binary), electron-builder (installer)
 
@@ -173,7 +173,7 @@ The migration prompt includes your memory, project structure, knowledge document
 
 ## How It Works
 
-1. **Cookie extraction**: Reads the AES-GCM encryption key from `%APPDATA%\Claude\Local State`, decrypts via Windows DPAPI, then opens the Chromium cookie database in SQLite readonly mode to decrypt the `sessionKey` cookie.
+1. **Cookie extraction**: Reads the AES-GCM encryption key from `%APPDATA%\Claude\Local State`, decrypts via Windows DPAPI. Since Claude Desktop holds an exclusive lock on the Cookies database, the app temporarily kills the Chromium Network Service subprocess, copies the database, and lets Chromium auto-restart the service (~1 second, no user impact). The copied database is then opened with SQLite to decrypt the `sessionKey` cookie.
 
 2. **API calls**: Uses the decrypted session cookie to authenticate against `claude.ai`'s internal API.
 

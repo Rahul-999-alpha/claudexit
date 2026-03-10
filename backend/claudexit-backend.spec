@@ -10,7 +10,6 @@ hiddenimports = (
     collect_submodules('fastapi') +
     collect_submodules('pydantic') +
     collect_submodules('starlette') +
-    collect_submodules('httpx') +
     collect_submodules('websockets') +
     ['cryptography', 'cryptography.hazmat.primitives.ciphers.aead']
 )

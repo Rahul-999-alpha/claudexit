@@ -1,10 +1,10 @@
 """
-Async Claude API client using httpx.
+Async Claude API client using urllib (Cloudflare-compatible TLS fingerprint).
 """
 
+import asyncio
 import json
-
-import httpx
+import urllib.request
 
 
 class ClaudeAPI:
@@ -19,24 +19,24 @@ class ClaudeAPI:
         self.org_id = cookies.get("lastActiveOrg")
         if not self.org_id:
             raise RuntimeError("lastActiveOrg cookie not found")
-        self._client = httpx.AsyncClient(
-            timeout=60.0,
-            headers={
-                "Cookie": self.cookie_str,
-                "User-Agent": self.USER_AGENT,
-                "Referer": "https://claude.ai/",
-                "Origin": "https://claude.ai",
-            },
-        )
 
     async def close(self):
-        await self._client.aclose()
+        pass
+
+    def _request_sync(self, url: str, accept: str = "application/json") -> bytes:
+        """Make an authenticated GET request (sync, runs in thread pool)."""
+        req = urllib.request.Request(url)
+        req.add_header("Cookie", self.cookie_str)
+        req.add_header("User-Agent", self.USER_AGENT)
+        req.add_header("Accept", accept)
+        req.add_header("Referer", "https://claude.ai/")
+        req.add_header("Origin", "https://claude.ai")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
 
     async def _request(self, url: str, accept: str = "application/json") -> bytes:
         """Make an authenticated GET request, return raw bytes."""
-        resp = await self._client.get(url, headers={"Accept": accept})
-        resp.raise_for_status()
-        return resp.content
+        return await asyncio.to_thread(self._request_sync, url, accept)
 
     async def _get(self, path: str) -> dict | list:
         url = f"{self.BASE}/organizations/{self.org_id}/{path}"

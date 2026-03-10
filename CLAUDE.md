@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 
 - **Backend runs as subprocess**: Electron spawns `claudexit-backend.exe` (PyInstaller) on port 8020. In dev, runs `python -m uvicorn`.
 - **No database**: Pure export tool. State is in-memory only (cookies, API client, job progress).
-- **Cookie extraction**: DPAPI decryption of Chromium cookies from `%APPDATA%/Claude/`. Works while Claude Desktop is running (SQLite readonly mode).
+- **Cookie extraction**: DPAPI decryption of Chromium cookies from `%APPDATA%/Claude/`. Works while Claude Desktop is running (kills the Chromium Network Service subprocess to bypass exclusive file lock, copies the DB, service auto-restarts).
 - **Export pipeline**: Async background task with WebSocket progress streaming.
 - **Single-user desktop app**: No auth, no persistence, no multi-tenancy.
 
@@ -69,7 +69,8 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 ## Common Gotchas
 
 - **DPAPI**: Windows-only. The cookie extraction uses Windows CryptUnprotectData. Won't work on macOS/Linux.
-- **SQLite readonly**: Cookie DB is opened with `?mode=ro` URI to avoid file locks while Claude Desktop is running.
+- **Chromium file lock**: Claude Desktop's Network Service holds an exclusive lock (no `FILE_SHARE_READ`) on the Cookies DB. The code kills the Network Service, copies the file, and Chromium auto-restarts it. Direct SQLite readonly mode and `shutil.copy2` both fail while the lock is held.
+- **Cloudflare TLS fingerprinting**: `httpx` gets 403'd by Cloudflare on claude.ai. The API client uses `urllib.request` (via `asyncio.to_thread`) which has a compatible TLS fingerprint.
 - **FastAPI trailing slashes**: Use `@router.get("")` not `@router.get("/")` — the prefix adds the path.
 - **PyInstaller**: Must use `upx=False`. UPX corrupts DLLs on Windows.
 - **Port 8020**: Chosen to avoid conflicts with Briefinator (8000), Sprintinator (8010).
