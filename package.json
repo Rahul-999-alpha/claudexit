@@ -63,7 +63,8 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "claudexit"
+      "shortcutName": "claudexit",
+      "include": "build/installer.nsh"
     }
   }
 }
