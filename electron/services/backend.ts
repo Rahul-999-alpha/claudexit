@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, execFileSync, ChildProcess } from 'child_process'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -10,7 +10,35 @@ export function getBackendUrl(): string {
   return BACKEND_URL
 }
 
+function killProcessOnPort(port: number): void {
+  try {
+    // Find PIDs listening on the port
+    const result = execFileSync('netstat', ['-ano'], { encoding: 'utf-8', timeout: 5000 })
+    const lines = result.split('\n')
+    const pids = new Set<string>()
+    for (const line of lines) {
+      if (line.includes(`:${port}`) && line.includes('LISTENING')) {
+        const parts = line.trim().split(/\s+/)
+        const pid = parts[parts.length - 1]
+        if (pid && pid !== '0') pids.add(pid)
+      }
+    }
+    for (const pid of pids) {
+      console.log(`Killing stale process on port ${port} (PID ${pid})`)
+      try {
+        execFileSync('taskkill', ['/F', '/PID', pid], { timeout: 5000 })
+      } catch {
+        // Process may have already exited
+      }
+    }
+  } catch {
+    // No process on the port — good
+  }
+}
+
 export function startBackend(): void {
+  // Kill anything already on our port (stale backend from crash/dev)
+  killProcessOnPort(BACKEND_PORT)
   const backendDir = is.dev
     ? join(__dirname, '../../backend')
     : join(process.resourcesPath, 'backend')
