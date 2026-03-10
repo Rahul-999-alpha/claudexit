@@ -33,7 +33,7 @@ npm run dev
 ```bash
 # Full build pipeline
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1
-# Output: release/claudexit Setup 1.0.0.exe
+# Output: release/claudexit Setup {version}.exe
 ```
 
 ### Architecture

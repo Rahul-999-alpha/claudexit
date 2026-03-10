@@ -22,7 +22,7 @@ cd backend && python -m PyInstaller claudexit-backend.spec --noconfirm
 
 # Build Windows installer (full pipeline)
 powershell -ExecutionPolicy Bypass -File scripts/build.ps1
-# Output: release/claudexit Setup 1.0.0.exe
+# Output: release/claudexit Setup {version}.exe
 ```
 
 ## Architecture
