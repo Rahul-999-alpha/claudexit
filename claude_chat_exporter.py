@@ -199,6 +199,10 @@ class ClaudeAPI:
         """Return knowledge documents for a project."""
         return self._get(f"projects/{project_uuid}/docs")
 
+    def get_memory(self) -> dict:
+        """Return the user's memory (markdown text + metadata)."""
+        return self._get("memory")
+
     def download_file(self, file_uuid: str, variant: str = "document_pdf") -> bytes:
         """Download an uploaded file by UUID and variant.
 
@@ -342,18 +346,37 @@ def generate_migration_prompt(export_dir: str) -> str:
     lines.append("# Claude Account Migration")
     lines.append("")
     lines.append("I'm migrating from another Claude account. Below is my complete")
-    lines.append("account structure — projects, knowledge documents, and conversation")
-    lines.append("history. Please help me recreate this setup on this new account.")
+    lines.append("account structure — memory, projects, knowledge documents, and")
+    lines.append("conversation history. Please help me recreate this setup on this")
+    lines.append("new account.")
     lines.append("")
+
+    # --- Memory ---
+    memory_file = export_path / "memory.md"
+    memory_json = export_path / "memory.json"
+    if memory_file.exists():
+        memory_text = memory_file.read_text(encoding="utf-8")
+        # Strip the "# Claude Memory\n\n" header we added
+        if memory_text.startswith("# Claude Memory"):
+            memory_text = memory_text.split("\n", 2)[-1].strip()
+        lines.append("## Memory from Previous Account")
+        lines.append("")
+        lines.append("Below is my complete memory from the previous account. Please")
+        lines.append("internalize all of this as your memory about me — this is who")
+        lines.append("I am, what I work on, and what we've discussed.")
+        lines.append("")
+        lines.append(memory_text)
+        lines.append("")
 
     # --- Instructions ---
     lines.append("## What I Need You To Do")
     lines.append("")
-    lines.append("1. **Create these projects** with their names and descriptions")
-    lines.append("2. **Note the knowledge documents** listed below — I will upload")
+    lines.append("1. **Absorb the memory above** as context about me")
+    lines.append("2. **Create these projects** with their names and descriptions")
+    lines.append("3. **Note the knowledge documents** listed below — I will upload")
     lines.append("   them as project knowledge files. The full content is included")
     lines.append("   so you have context even before I upload them.")
-    lines.append("3. **Review the conversation summaries** so you have context about")
+    lines.append("4. **Review the conversation summaries** so you have context about")
     lines.append("   what we've discussed previously.")
     lines.append("")
 
@@ -629,6 +652,23 @@ def main():
         with open(out_dir / "projects.json", "w", encoding="utf-8") as f:
             json.dump(projects, f, indent=2, ensure_ascii=False)
     print(f"\nSaved indexes to {out_dir}")
+
+    # ---- Export memory ----
+    if not args.chat:
+        try:
+            memory_data = api.get_memory()
+            memory_text = memory_data.get("memory", "")
+            if memory_text:
+                with open(out_dir / "memory.json", "w", encoding="utf-8") as f:
+                    json.dump(memory_data, f, indent=2, ensure_ascii=False)
+                with open(out_dir / "memory.md", "w", encoding="utf-8") as f:
+                    f.write("# Claude Memory\n\n")
+                    f.write(memory_text)
+                print(f"  Memory exported ({len(memory_text)} chars)")
+            else:
+                print("  No memory found")
+        except Exception as e:
+            print(f"  Could not export memory: {e}")
 
     # ---- Export project knowledge docs ----
     if not args.no_projects and projects and not args.chat:

@@ -65,6 +65,8 @@ python claude_chat_exporter.py --migrate --output my_backup
 claude_export/
   ├── conversations.json               # Index of all conversations
   ├── projects.json                     # Index of all projects
+  ├── memory.json                       # Full memory with metadata
+  ├── memory.md                         # Memory as readable Markdown
   ├── MIGRATION_PROMPT.md               # Account migration prompt (--migrate)
   │
   ├── _no_project/                      # Chats not assigned to any project
@@ -107,6 +109,7 @@ claudexit can generate a migration prompt that helps you recreate your account s
 
 ### What the migration prompt includes
 
+- **Memory** — your full memory from the previous account, so the new Claude knows who you are from the start
 - **Project structure** — names, descriptions, and settings for each project
 - **Knowledge documents** — full content of every knowledge doc, so the new account has complete context even before you re-upload them
 - **Conversation summaries** — a table of all past conversations with dates, models used, titles, and auto-generated summaries grouped by project
@@ -122,6 +125,7 @@ claudexit can generate a migration prompt that helps you recreate your account s
 
 | Data | Included | Notes |
 |------|----------|-------|
+| Memory | Yes | Full memory text and metadata |
 | Conversations (all messages) | Yes | Full message history with metadata |
 | Projects (metadata) | Yes | Name, description, timestamps |
 | Project knowledge docs | Yes | Full markdown content of uploaded knowledge |
@@ -148,6 +152,7 @@ claudexit can generate a migration prompt that helps you recreate your account s
    - `GET /api/organizations/{org}/chat_conversations/{id}?tree=True&rendering_mode=messages` — full conversation with messages
    - `GET /api/organizations/{org}/projects` — list projects
    - `GET /api/organizations/{org}/projects/{id}/docs` — project knowledge documents
+   - `GET /api/organizations/{org}/memory` — user memory
    - `GET /api/{org}/files/{id}/{variant}` — download uploaded files
 
 3. **Export**: Organizes everything by project into the output directory.
