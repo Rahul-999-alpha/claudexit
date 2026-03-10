@@ -88,11 +88,39 @@ def detect_claude_desktop() -> dict:
     }
 
 
+def _open_cookies_db(cookies_db: str):
+    """Open the Chromium cookies database.
+
+    Tries SQLite URI readonly mode first (works while Claude Desktop is running).
+    Falls back to copying to a temp file if URI mode isn't supported.
+    """
+    # Try URI readonly mode first
+    try:
+        db_uri = f"file:///{cookies_db.replace(os.sep, '/')}?mode=ro"
+        conn = sqlite3.connect(db_uri, uri=True)
+        conn.execute("SELECT 1 FROM cookies LIMIT 1")
+        return conn
+    except Exception:
+        pass
+
+    # Fallback: copy to temp file (handles locked DB and URI-unsupported builds)
+    import shutil
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    shutil.copy2(cookies_db, tmp.name)
+    # Also copy WAL/SHM if they exist (needed for recent writes)
+    for ext in ("-wal", "-shm"):
+        src = cookies_db + ext
+        if os.path.isfile(src):
+            shutil.copy2(src, tmp.name + ext)
+    return sqlite3.connect(tmp.name)
+
+
 def get_claude_cookies() -> dict[str, str]:
     """Extract and decrypt all claude.ai cookies.
 
-    Uses SQLite readonly URI mode to read the database without needing
-    to copy it — works even while the Claude Desktop app is running.
+    Tries SQLite readonly URI mode first, falls back to copying the DB.
     """
     claude_data_dir = get_claude_data_dir()
 
@@ -105,10 +133,13 @@ def get_claude_cookies() -> dict[str, str]:
     aes_key = get_aes_key(claude_data_dir)
 
     cookies_db = os.path.join(claude_data_dir, "Network", "Cookies")
-    # Use forward slashes for SQLite URI and readonly mode to avoid file locks
-    db_uri = f"file:///{cookies_db.replace(os.sep, '/')}?mode=ro"
+    if not os.path.isfile(cookies_db):
+        raise RuntimeError(
+            f"Cookie database not found at {cookies_db}. "
+            "Has Claude Desktop been logged in?"
+        )
 
-    conn = sqlite3.connect(db_uri, uri=True)
+    conn = _open_cookies_db(cookies_db)
     cookies = {}
     try:
         for name, enc_val in conn.execute(

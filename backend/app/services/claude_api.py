@@ -2,6 +2,8 @@
 Async Claude API client using httpx.
 """
 
+import json
+
 import httpx
 
 
@@ -39,15 +41,13 @@ class ClaudeAPI:
     async def _get(self, path: str) -> dict | list:
         url = f"{self.BASE}/organizations/{self.org_id}/{path}"
         data = await self._request(url)
-        import json
         return json.loads(data)
 
     async def verify_session(self) -> dict:
-        """Verify session is valid by fetching organizations."""
-        data = await self._request(f"{self.BASE}/organizations")
-        import json
-        orgs = json.loads(data)
-        return {"valid": True, "org_id": self.org_id, "organizations": orgs}
+        """Verify session is valid by fetching the conversation list."""
+        # Use chat_conversations instead of /organizations — more reliable
+        convos = await self._get("chat_conversations")
+        return {"valid": True, "org_id": self.org_id, "conversation_count": len(convos)}
 
     async def list_conversations(self) -> list[dict]:
         return await self._get("chat_conversations")
