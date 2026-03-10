@@ -72,6 +72,48 @@ app.whenReady().then(async () => {
     await shell.openPath(path)
   })
 
+  ipcMain.handle('login-with-browser', async () => {
+    return new Promise<Record<string, string> | null>((resolve) => {
+      const loginWindow = new BrowserWindow({
+        width: 900,
+        height: 700,
+        parent: mainWindow ?? undefined,
+        modal: true,
+        title: 'Log in to Claude',
+        webPreferences: { nodeIntegration: false, contextIsolation: true }
+      })
+
+      loginWindow.setMenuBarVisibility(false)
+      loginWindow.loadURL('https://claude.ai/login')
+
+      // Poll for sessionKey cookie every second
+      const interval = setInterval(async () => {
+        try {
+          const cookies = await loginWindow.webContents.session.cookies.get({
+            url: 'https://claude.ai'
+          })
+          const hasSession = cookies.some((c) => c.name === 'sessionKey')
+          if (hasSession) {
+            clearInterval(interval)
+            const cookieMap: Record<string, string> = {}
+            for (const c of cookies) {
+              cookieMap[c.name] = c.value
+            }
+            loginWindow.close()
+            resolve(cookieMap)
+          }
+        } catch {
+          // Window may have been closed
+        }
+      }, 1000)
+
+      loginWindow.on('closed', () => {
+        clearInterval(interval)
+        resolve(null)
+      })
+    })
+  })
+
   // Start FastAPI backend
   startBackend()
   const backendReady = await waitForBackend()

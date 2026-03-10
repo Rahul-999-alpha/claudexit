@@ -12,6 +12,10 @@ class ConnectResponse(BaseModel):
     error: str | None = None
 
 
+class ConnectWithCookiesRequest(BaseModel):
+    cookies: dict[str, str]
+
+
 class PreviewStats(BaseModel):
     total_conversations: int
     total_projects: int

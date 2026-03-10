@@ -4,7 +4,7 @@ POST /api/connect — Extract cookies and verify Claude session.
 
 from fastapi import APIRouter
 
-from app.models import ConnectResponse
+from app.models import ConnectResponse, ConnectWithCookiesRequest
 from app.services.cookies import detect_claude_desktop, get_claude_cookies
 from app.services.claude_api import ClaudeAPI
 
@@ -58,6 +58,37 @@ async def connect():
         return ConnectResponse(
             status="error",
             error=f"Session verification failed: {e}. Try opening Claude Desktop first.",
+        )
+
+    return ConnectResponse(
+        status="connected",
+        org_id=_api.org_id,
+        session_preview=_cookies["sessionKey"][:15] + "...",
+    )
+
+
+@router.post("/connect/cookies", response_model=ConnectResponse)
+async def connect_with_cookies(req: ConnectWithCookiesRequest):
+    """Connect using cookies provided directly (from browser login)."""
+    global _cookies, _api
+
+    _cookies = req.cookies
+
+    if "sessionKey" not in _cookies:
+        _cookies = None
+        return ConnectResponse(
+            status="error",
+            error="No sessionKey found in browser cookies. Please log in fully.",
+        )
+
+    try:
+        _api = ClaudeAPI(_cookies)
+        await _api.verify_session()
+    except Exception as e:
+        _api = None
+        return ConnectResponse(
+            status="error",
+            error=f"Session verification failed: {e}",
         )
 
     return ConnectResponse(

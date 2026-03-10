@@ -28,6 +28,12 @@ export const api = {
 
   connect: () => request<ConnectResponse>('/api/connect', { method: 'POST' }),
 
+  connectWithCookies: (cookies: Record<string, string>) =>
+    request<ConnectResponse>('/api/connect/cookies', {
+      method: 'POST',
+      body: JSON.stringify({ cookies })
+    }),
+
   preview: () => request<PreviewResponse>('/api/preview'),
 
   exportStart: (config: ExportConfig) =>

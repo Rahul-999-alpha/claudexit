@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   openPath: (path: string) => ipcRenderer.invoke('open-path', path),
 
+  // Browser login
+  loginWithBrowser: () => ipcRenderer.invoke('login-with-browser'),
+
   // Platform info
   platform: process.platform
 })
@@ -24,6 +27,7 @@ declare global {
       isMaximized: () => Promise<boolean>
       selectDirectory: () => Promise<string | null>
       openPath: (path: string) => Promise<void>
+      loginWithBrowser: () => Promise<Record<string, string> | null>
       platform: string
     }
   }
