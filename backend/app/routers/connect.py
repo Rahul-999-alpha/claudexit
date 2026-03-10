@@ -30,9 +30,11 @@ async def connect():
     # Check installation
     status = detect_claude_desktop()
     if not status["installed"]:
+        searched = status.get("searched", [])
+        detail = f" Searched: {', '.join(searched)}" if searched else ""
         return ConnectResponse(
             status="error",
-            error="Claude Desktop not found. Is it installed?",
+            error=f"Claude Desktop not found. Is it installed?{detail}",
         )
     if not status["has_cookies"]:
         return ConnectResponse(

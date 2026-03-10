@@ -69,20 +69,62 @@ def decrypt_cookie_value(encrypted_value: bytes, aes_key: bytes) -> str:
     return plaintext[32:].decode("utf-8")
 
 
-def get_claude_data_dir() -> str:
-    """Return the Claude Desktop data directory path."""
-    return os.path.join(os.environ.get("APPDATA", ""), "Claude")
+def _candidate_data_dirs() -> list[str]:
+    """Return all possible Claude Desktop data directory paths."""
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    candidates = []
+    for root in [appdata, localappdata]:
+        if not root:
+            continue
+        candidates.extend([
+            os.path.join(root, "Claude"),
+            os.path.join(root, "claude"),
+            os.path.join(root, "Claude Desktop"),
+            os.path.join(root, "claude-desktop"),
+            os.path.join(root, "Anthropic", "Claude"),
+            os.path.join(root, "AnthropicClaude"),
+        ])
+    return candidates
+
+
+def get_claude_data_dir() -> str | None:
+    """Find the Claude Desktop data directory by checking known paths.
+
+    Returns the first directory that contains both 'Local State' and
+    'Network/Cookies' (the two files needed for cookie extraction).
+    """
+    for path in _candidate_data_dirs():
+        if (
+            os.path.isdir(path)
+            and os.path.isfile(os.path.join(path, "Local State"))
+            and os.path.isfile(os.path.join(path, "Network", "Cookies"))
+        ):
+            return path
+    # Fallback: return first directory that exists (even without cookies)
+    for path in _candidate_data_dirs():
+        if os.path.isdir(path) and os.path.isfile(os.path.join(path, "Local State")):
+            return path
+    return None
 
 
 def detect_claude_desktop() -> dict:
     """Check if Claude Desktop is installed and return status info."""
     data_dir = get_claude_data_dir()
-    installed = os.path.isdir(data_dir)
-    cookies_db = os.path.join(data_dir, "Network", "Cookies") if installed else ""
-    has_cookies = os.path.isfile(cookies_db) if installed else False
+    if not data_dir:
+        searched = [p for p in _candidate_data_dirs() if os.path.isdir(p)]
+        return {
+            "installed": False,
+            "data_dir": "",
+            "has_cookies": False,
+            "searched": searched,
+        }
+
+    cookies_db = os.path.join(data_dir, "Network", "Cookies")
+    has_cookies = os.path.isfile(cookies_db)
 
     return {
-        "installed": installed,
+        "installed": True,
         "data_dir": data_dir,
         "has_cookies": has_cookies,
     }
@@ -231,9 +273,11 @@ def get_claude_cookies() -> dict[str, str]:
     """
     claude_data_dir = get_claude_data_dir()
 
-    if not os.path.isdir(claude_data_dir):
+    if not claude_data_dir:
+        searched = ", ".join(_candidate_data_dirs()[:4])
         raise RuntimeError(
-            f"Claude Desktop data directory not found at {claude_data_dir}. "
+            f"Claude Desktop data directory not found. "
+            f"Searched: {searched}, ... "
             "Is the Claude Desktop app installed?"
         )
 
