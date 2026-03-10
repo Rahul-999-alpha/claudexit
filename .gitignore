@@ -1,6 +1,32 @@
+# CLI export output
 claude_export/
 claude_export_*/
-*.db
+
+# Node
+node_modules/
+out/
+release/
+dist/
+*.exe
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.db
+backend/dist/
+backend/build/
+backend/venv/
+backend/.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Env
 .env
+.env.local
