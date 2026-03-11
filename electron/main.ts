@@ -1,11 +1,27 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { startBackend, stopBackend, waitForBackend } from './services/backend'
 
 let mainWindow: BrowserWindow | null = null
 
+function getAppIcon(): Electron.NativeImage | undefined {
+  const candidates = [
+    join(__dirname, '../../build/icon.ico'),
+    join(__dirname, '../../build/icon.png'),
+    join(process.resourcesPath, 'icons', 'icon.ico'),
+    join(process.resourcesPath, 'icons', 'icon.png')
+  ]
+  for (const p of candidates) {
+    if (existsSync(p)) return nativeImage.createFromPath(p)
+  }
+  return undefined
+}
+
 function createWindow(): void {
+  const icon = getAppIcon()
+
   mainWindow = new BrowserWindow({
     width: 800,
     height: 640,
@@ -16,6 +32,7 @@ function createWindow(): void {
     backgroundColor: '#0D0D0D',
     show: false,
     resizable: true,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       sandbox: false,
@@ -26,6 +43,13 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  // F12 → DevTools (always, not just in dev)
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.key === 'F12') {
+      mainWindow?.webContents.toggleDevTools()
+    }
   })
 
   mainWindow.on('closed', () => {

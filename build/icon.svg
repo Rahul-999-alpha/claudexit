@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#060c18"/>
+      <stop offset="100%" stop-color="#0e1f35"/>
+    </linearGradient>
+
+    <radialGradient id="sunsetGlow" cx="22%" cy="70%" r="32%">
+      <stop offset="0%"   stop-color="#c2410c" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#c2410c" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="sunriseGlow" cx="80%" cy="70%" r="36%">
+      <stop offset="0%"   stop-color="#f59e0b" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Arc gradient: orange → dark → gold -->
+    <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ea580c" stop-opacity="0.6"/>
+      <stop offset="40%"  stop-color="#92400e" stop-opacity="0.15"/>
+      <stop offset="60%"  stop-color="#92400e" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.6"/>
+    </linearGradient>
+
+    <!--
+      Arc mask: fade the arc to invisible near each star so it doesn't
+      bleed through their semi-transparent outer layers.
+      Mask is white (visible) everywhere except near star centers.
+    -->
+    <radialGradient id="maskFade1" cx="102" cy="345" r="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="black"/>
+      <stop offset="65%"  stop-color="black"/>
+      <stop offset="100%" stop-color="white"/>
+    </radialGradient>
+    <radialGradient id="maskFade2" cx="410" cy="345" r="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="black"/>
+      <stop offset="65%"  stop-color="black"/>
+      <stop offset="100%" stop-color="white"/>
+    </radialGradient>
+    <mask id="arcMask">
+      <rect width="512" height="512" fill="white"/>
+      <circle cx="102" cy="345" r="58"  fill="url(#maskFade1)"/>
+      <circle cx="410" cy="345" r="82"  fill="url(#maskFade2)"/>
+    </mask>
+
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="13" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="mglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="sglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- 8-pointed star: two overlapping 4-pointed bezier stars, second rotated 45° -->
+    <symbol id="spark" viewBox="-1 -1 2 2">
+      <path d="M 0,-1 C 0.15,-0.5 0.5,-0.15 1,0 C 0.5,0.15 0.15,0.5 0,1 C -0.15,0.5 -0.5,0.15 -1,0 C -0.5,-0.15 -0.15,-0.5 0,-1 Z"/>
+      <path d="M 0,-1 C 0.15,-0.5 0.5,-0.15 1,0 C 0.5,0.15 0.15,0.5 0,1 C -0.15,0.5 -0.5,0.15 -1,0 C -0.5,-0.15 -0.15,-0.5 0,-1 Z" transform="rotate(45)"/>
+    </symbol>
+  </defs>
+
+  <!-- Sky + glows (radial glows at cy=70% ≈ y358 imply the horizon naturally) -->
+  <rect width="512" height="512" rx="88" fill="url(#sky)"/>
+  <rect width="512" height="512" rx="88" fill="url(#sunsetGlow)"/>
+  <rect width="512" height="512" rx="88" fill="url(#sunriseGlow)"/>
+
+  <!--
+    Dome trajectory arc — masked to fade out near star bodies:
+    M 102,345  C 102,96  410,96  410,345
+
+    Ghost positions (bezier t values):
+      t=0.15  →  (121, 250)
+      t=0.35  →  (189, 175)
+      t=0.50  →  (256, 158)  ← apex
+      t=0.65  →  (323, 175)
+      t=0.85  →  (391, 250)
+  -->
+  <path d="M 102,345 C 102,96 410,96 410,345"
+        fill="none" stroke="url(#arcGrad)" stroke-width="1.5"
+        stroke-dasharray="6 10" stroke-linecap="round"
+        mask="url(#arcMask)"/>
+
+  <!-- ─── GHOST STATES (dim→bright, small→larger, orange→gold) ─── -->
+
+  <!-- t=0.15: (121, 250) — tiny, dim orange -->
+  <g transform="translate(121,250)" opacity="0.18" filter="url(#sglow)">
+    <use href="#spark" x="-13" y="-13" width="26" height="26" fill="#f97316"/>
+  </g>
+
+  <!-- t=0.35: (189, 175) — small, amber -->
+  <g transform="translate(189,175)" opacity="0.25" filter="url(#sglow)">
+    <use href="#spark" x="-16" y="-16" width="32" height="32" fill="#f59e0b"/>
+  </g>
+
+  <!-- t=0.50: (256, 158) — medium, apex, amber-gold -->
+  <g transform="translate(256,158)" opacity="0.30" filter="url(#sglow)">
+    <use href="#spark" x="-19" y="-19" width="38" height="38" fill="#fbbf24"/>
+  </g>
+
+  <!-- t=0.65: (323, 175) — medium, gold -->
+  <g transform="translate(323,175)" opacity="0.36" filter="url(#sglow)">
+    <use href="#spark" x="-19" y="-19" width="38" height="38" fill="#fbbf24"/>
+  </g>
+
+  <!-- t=0.85: (391, 250) — medium, bright gold -->
+  <g transform="translate(391,250)" opacity="0.43" filter="url(#sglow)">
+    <use href="#spark" x="-16" y="-16" width="32" height="32" fill="#fbbf24"/>
+  </g>
+
+  <!-- ─── SETTING STAR — (102, 345), dim orange-red ─── -->
+  <g transform="translate(102,345)" filter="url(#mglow)" opacity="0.72">
+    <use href="#spark" x="-50" y="-50" width="100" height="100" fill="#c2410c" opacity="0.22"/>
+    <use href="#spark" x="-42" y="-42" width="84"  height="84"  fill="#ea580c"/>
+    <use href="#spark" x="-24" y="-24" width="48"  height="48"  fill="#fed7aa" opacity="0.28"/>
+  </g>
+
+  <!-- ─── RISING STAR — (410, 345), full brightness gold ─── -->
+  <g transform="translate(410,345)" filter="url(#glow)">
+    <use href="#spark" x="-78" y="-78" width="156" height="156" fill="#f59e0b" opacity="0.18"/>
+    <use href="#spark" x="-62" y="-62" width="124" height="124" fill="#fbbf24"/>
+    <use href="#spark" x="-38" y="-38" width="76"  height="76"  fill="#fef9c3" opacity="0.58"/>
+  </g>
+
+  <!-- Night-sky background stars -->
+  <circle cx="70"  cy="52"  r="1.5" fill="white" opacity="0.50"/>
+  <circle cx="155" cy="34"  r="1"   fill="white" opacity="0.38"/>
+  <circle cx="235" cy="80"  r="1.2" fill="white" opacity="0.32"/>
+  <circle cx="295" cy="50"  r="1"   fill="white" opacity="0.42"/>
+  <circle cx="340" cy="100" r="1"   fill="white" opacity="0.28"/>
+  <circle cx="448" cy="62"  r="1.5" fill="white" opacity="0.48"/>
+  <circle cx="462" cy="118" r="1"   fill="white" opacity="0.34"/>
+  <circle cx="56"  cy="154" r="1"   fill="white" opacity="0.26"/>
+  <circle cx="200" cy="132" r="1.2" fill="white" opacity="0.24"/>
+  <circle cx="168" cy="112" r="1"   fill="white" opacity="0.30"/>
+</svg>

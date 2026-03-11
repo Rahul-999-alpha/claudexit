@@ -4,11 +4,9 @@ import type { WizardStep } from '@/lib/types'
 import { Check } from 'lucide-react'
 
 const STEPS: { key: WizardStep; label: string }[] = [
-  { key: 'connect', label: 'Connect' },
-  { key: 'preview', label: 'Preview' },
-  { key: 'configure', label: 'Configure' },
-  { key: 'export', label: 'Export' },
-  { key: 'complete', label: 'Done' }
+  { key: 'connect_source', label: 'Source' },
+  { key: 'connect_destination', label: 'Destination' },
+  { key: 'dashboard', label: 'Migrate' },
 ]
 
 function StepIndicator() {

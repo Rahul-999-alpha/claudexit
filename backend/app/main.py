@@ -5,7 +5,8 @@ claudexit — FastAPI Backend
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import connect, preview, export, migrate
+from app.routers import connect, preview, export
+from app.routers import dashboard, migrate_v2
 
 app = FastAPI(
     title="claudexit API",
@@ -26,7 +27,8 @@ app.add_middleware(
 app.include_router(connect.router, prefix="/api")
 app.include_router(preview.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
-app.include_router(migrate.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
+app.include_router(migrate_v2.router, prefix="/api")
 
 
 @app.get("/health")

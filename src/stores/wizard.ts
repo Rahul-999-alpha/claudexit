@@ -2,75 +2,119 @@ import { create } from 'zustand'
 import type {
   WizardStep,
   ConnectResponse,
-  PreviewResponse,
-  ExportConfig,
-  ExportProgress
+  DashboardResponse,
+  MigrateProgress,
+  ItemMigrationState
 } from '@/lib/types'
 
 interface WizardState {
-  // Current step
+  // Navigation
   step: WizardStep
   setStep: (step: WizardStep) => void
 
-  // Step 1: Connect
-  connectResult: ConnectResponse | null
-  setConnectResult: (result: ConnectResponse | null) => void
+  // Step 1: Connect Source
+  sourceConnectResult: ConnectResponse | null
+  setSourceConnectResult: (result: ConnectResponse | null) => void
 
-  // Step 2: Preview
-  previewData: PreviewResponse | null
-  setPreviewData: (data: PreviewResponse | null) => void
+  // Step 2: Connect Destination
+  destConnectResult: ConnectResponse | null
+  setDestConnectResult: (result: ConnectResponse | null) => void
 
-  // Step 3: Configure
-  exportConfig: ExportConfig
-  updateConfig: (partial: Partial<ExportConfig>) => void
+  // Step 3: Dashboard
+  dashboardData: DashboardResponse | null
+  setDashboardData: (data: DashboardResponse | null) => void
+  dashboardLoading: boolean
+  setDashboardLoading: (v: boolean) => void
 
-  // Step 4: Export
-  exportJobId: string | null
-  setExportJobId: (id: string | null) => void
-  exportProgress: ExportProgress | null
-  setExportProgress: (progress: ExportProgress | null) => void
+  // Per-item migration state
+  // Key format: "memory:global", "memory:{project_uuid}", "project:{uuid}", "conv:{uuid}"
+  migrationStates: Record<string, ItemMigrationState>
+  setMigrationState: (key: string, state: ItemMigrationState) => void
+  getMigrationState: (key: string) => ItemMigrationState
 
-  // Reset
+  // Active migration jobs (jobId -> MigrateProgress)
+  activeJobs: Record<string, MigrateProgress>
+  setJobProgress: (jobId: string, progress: MigrateProgress) => void
+  clearJob: (jobId: string) => void
+
+  // Output dir for local exports
+  outputDir: string
+  setOutputDir: (dir: string) => void
+
+  // Selection queue (dashboard sidebar)
+  selectedItems: string[]        // item keys: "project:{uuid}", "conv:{uuid}"
+  toggleQueueItem: (key: string) => void
+  selectAll: (keys: string[]) => void
+  deselectAll: (keys: string[]) => void
+  clearQueue: () => void
+
+  // Reset everything
   reset: () => void
 }
 
-const defaultConfig: ExportConfig = {
-  output_dir: '',
-  export_conversations: true,
-  export_projects: true,
-  download_files: true,
-  include_thinking: true,
-  export_memory: true,
-  format: 'both',
-  generate_migration: false
-}
-
-export const useWizardStore = create<WizardState>((set) => ({
-  step: 'connect',
+export const useWizardStore = create<WizardState>((set, get) => ({
+  step: 'connect_source',
   setStep: (step) => set({ step }),
 
-  connectResult: null,
-  setConnectResult: (connectResult) => set({ connectResult }),
+  sourceConnectResult: null,
+  setSourceConnectResult: (sourceConnectResult) => set({ sourceConnectResult }),
 
-  previewData: null,
-  setPreviewData: (previewData) => set({ previewData }),
+  destConnectResult: null,
+  setDestConnectResult: (destConnectResult) => set({ destConnectResult }),
 
-  exportConfig: { ...defaultConfig },
-  updateConfig: (partial) =>
-    set((state) => ({ exportConfig: { ...state.exportConfig, ...partial } })),
+  dashboardData: null,
+  setDashboardData: (dashboardData) => set({ dashboardData }),
+  dashboardLoading: false,
+  setDashboardLoading: (dashboardLoading) => set({ dashboardLoading }),
 
-  exportJobId: null,
-  setExportJobId: (exportJobId) => set({ exportJobId }),
-  exportProgress: null,
-  setExportProgress: (exportProgress) => set({ exportProgress }),
+  migrationStates: {},
+  setMigrationState: (key, state) =>
+    set((s) => ({ migrationStates: { ...s.migrationStates, [key]: state } })),
+  getMigrationState: (key) => get().migrationStates[key] ?? { status: 'idle' },
+
+  activeJobs: {},
+  setJobProgress: (jobId, progress) =>
+    set((s) => ({ activeJobs: { ...s.activeJobs, [jobId]: progress } })),
+  clearJob: (jobId) =>
+    set((s) => {
+      const activeJobs = { ...s.activeJobs }
+      delete activeJobs[jobId]
+      return { activeJobs }
+    }),
+
+  outputDir: '',
+  setOutputDir: (outputDir) => set({ outputDir }),
+
+  selectedItems: [],
+  toggleQueueItem: (key) =>
+    set((s) => ({
+      selectedItems: s.selectedItems.includes(key)
+        ? s.selectedItems.filter((k) => k !== key)
+        : [...s.selectedItems, key]
+    })),
+  selectAll: (keys) =>
+    set((s) => {
+      const existing = new Set(s.selectedItems)
+      for (const k of keys) existing.add(k)
+      return { selectedItems: [...existing] }
+    }),
+  deselectAll: (keys) =>
+    set((s) => {
+      const toRemove = new Set(keys)
+      return { selectedItems: s.selectedItems.filter((k) => !toRemove.has(k)) }
+    }),
+  clearQueue: () => set({ selectedItems: [] }),
 
   reset: () =>
     set({
-      step: 'connect',
-      connectResult: null,
-      previewData: null,
-      exportConfig: { ...defaultConfig },
-      exportJobId: null,
-      exportProgress: null
+      step: 'connect_source',
+      sourceConnectResult: null,
+      destConnectResult: null,
+      dashboardData: null,
+      dashboardLoading: false,
+      migrationStates: {},
+      activeJobs: {},
+      outputDir: '',
+      selectedItems: []
     })
 }))

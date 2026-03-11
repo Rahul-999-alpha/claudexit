@@ -95,13 +95,56 @@ def conversation_to_markdown(conv: dict, project_name: str = "") -> str:
 
 
 def collect_files_from_conversation(conv: dict) -> list[dict]:
-    """Extract all file references from a conversation's messages."""
+    """Extract all file references from a conversation's messages.
+
+    Searches multiple locations where Claude API may store file references:
+    - msg.files_v2 (primary)
+    - msg.files (fallback)
+    - content blocks with file attachments or images
+    - top-level conv.files_v2 / conv.files
+    """
     files = []
-    seen = set()
+    seen: set[str] = set()
+
+    def _add(f: dict) -> None:
+        fid = f.get("file_uuid") or f.get("uuid")
+        if fid and fid not in seen:
+            seen.add(fid)
+            files.append(f)
+
     for msg in conv.get("chat_messages", []):
+        # Primary: files_v2
         for f in msg.get("files_v2", []):
-            fid = f.get("file_uuid") or f.get("uuid")
-            if fid and fid not in seen:
-                seen.add(fid)
-                files.append(f)
+            _add(f)
+        # Fallback: files field
+        for f in msg.get("files", []):
+            if isinstance(f, dict):
+                _add(f)
+        # Fallback: content blocks with attachments
+        content = msg.get("content", [])
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type", "")
+                # tool_result blocks may contain nested file refs
+                if btype == "tool_result":
+                    for inner in block.get("content", []):
+                        if isinstance(inner, dict) and inner.get("file_uuid"):
+                            _add(inner)
+                # Direct file reference in content block
+                if block.get("file_uuid"):
+                    _add(block)
+        # Attachments array on message
+        for f in msg.get("attachments", []):
+            if isinstance(f, dict):
+                _add(f)
+
+    # Top-level conversation file references
+    for f in conv.get("files_v2", []):
+        _add(f)
+    for f in conv.get("files", []):
+        if isinstance(f, dict):
+            _add(f)
+
     return files
