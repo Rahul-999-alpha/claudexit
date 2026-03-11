@@ -8,6 +8,8 @@ from pydantic import BaseModel
 class ConnectResponse(BaseModel):
     status: str  # "connected" | "error"
     org_id: str | None = None
+    account_email: str | None = None
+    account_name: str | None = None
     session_preview: str | None = None
     error: str | None = None
 

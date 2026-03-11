@@ -96,7 +96,7 @@ app.whenReady().then(async () => {
     await shell.openPath(path)
   })
 
-  ipcMain.handle('login-with-browser', async () => {
+  ipcMain.handle('login-with-browser', async (_event, partition?: string) => {
     return new Promise<Record<string, string> | null>((resolve) => {
       const loginWindow = new BrowserWindow({
         width: 900,
@@ -104,7 +104,11 @@ app.whenReady().then(async () => {
         parent: mainWindow ?? undefined,
         modal: true,
         title: 'Log in to Claude',
-        webPreferences: { nodeIntegration: false, contextIsolation: true }
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          ...(partition ? { partition } : {})
+        }
       })
 
       loginWindow.setMenuBarVisibility(false)

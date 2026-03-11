@@ -20,8 +20,9 @@ import type {
 
 interface ModalState {
   open: boolean
-  mode: 'project' | 'conversation' | 'memory'
+  mode: 'project' | 'conversation' | 'memory' | 'bulk'
   item: DashboardProject | DashboardConversation | null
+  bulkKeys?: string[]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -106,13 +107,15 @@ export function Dashboard() {
     setMigrationState,
     setJobProgress,
     clearJob,
+    loadPersistedHistory,
     sourceConnectResult,
     destConnectResult,
     setStep,
     reset,
     selectedItems,
     selectAll,
-    deselectAll
+    deselectAll,
+    importMode
   } = useWizardStore()
 
   const [error, setError] = useState<string | null>(null)
@@ -165,10 +168,27 @@ export function Dashboard() {
   }, [setDashboardData, setDashboardLoading])
 
   useEffect(() => {
-    if (!dashboardData) {
+    // In import mode, dashboardData is already set from the scan response
+    if (!dashboardData && !importMode) {
       loadDashboard()
     }
-  }, [dashboardData, loadDashboard])
+  }, [dashboardData, loadDashboard, importMode])
+
+  // ── Load persisted migration history ────────────────────────────────────
+
+  const historyLoaded = useRef(false)
+
+  useEffect(() => {
+    if (historyLoaded.current || !destConnectResult?.org_id) return
+    historyLoaded.current = true
+    api.getMigrateHistory().then((res) => {
+      if (res.items && Object.keys(res.items).length > 0) {
+        loadPersistedHistory(res.items)
+      }
+    }).catch(() => {
+      // Non-critical — silently ignore
+    })
+  }, [destConnectResult, loadPersistedHistory])
 
   // ── Background file count scan ──────────────────────────────────────────
 
@@ -448,6 +468,26 @@ export function Dashboard() {
       handleMigrateProject(modal.item as DashboardProject, opts)
     } else if (modal.mode === 'conversation' && modal.item) {
       handleMigrateConversation(modal.item as DashboardConversation, opts)
+    } else if (modal.mode === 'bulk' && modal.bulkKeys) {
+      executeBulkMigrate(modal.bulkKeys, opts)
+    }
+  }
+
+  const executeBulkMigrate = (
+    keys: string[],
+    opts: { template?: string; include_files: boolean; migrate_conversations?: boolean }
+  ) => {
+    for (const key of keys) {
+      const [type, ...rest] = key.split(':')
+      const uuid = rest.join(':')
+
+      if (type === 'project') {
+        const project = dashboardData?.projects.find((p) => p.uuid === uuid)
+        if (project) handleMigrateProject(project, opts)
+      } else if (type === 'conv') {
+        const conv = dashboardData?.standalone_conversations.find((c) => c.uuid === uuid)
+        if (conv) handleMigrateConversation(conv, opts)
+      }
     }
   }
 
@@ -498,8 +538,12 @@ export function Dashboard() {
     }
   }
 
-  const handleMigrateSelected = (_keys: string[]) => {
-    showToast('Bulk migrate coming soon')
+  const handleMigrateSelected = (keys: string[]) => {
+    if (!hasDest) {
+      showToast('Connect a destination account to migrate')
+      return
+    }
+    setModal({ open: true, mode: 'bulk', item: null, bulkKeys: keys })
   }
 
   // ── Select All helpers ──────────────────────────────────────────────────
@@ -532,6 +576,9 @@ export function Dashboard() {
   const stats = dashboardData?.stats
   const hasDest = destConnectResult?.status === 'connected'
 
+  const accountLabel = (r: typeof sourceConnectResult) =>
+    r?.account_email || r?.account_name || (r?.org_id ? truncate(r.org_id, 20) : '')
+
   const migrateOrPrompt = (fn: () => void) =>
     hasDest ? fn : () => showToast('Connect a destination account to migrate')
 
@@ -543,7 +590,11 @@ export function Dashboard() {
       {/* ── No-destination banner ── */}
       {!hasDest && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/20 bg-amber-500/5 px-6 py-2">
-          <span className="text-xs text-amber-400/80">Export only — no destination account connected. Migrate buttons are disabled.</span>
+          <span className="text-xs text-amber-400/80">
+            {importMode
+              ? 'Import mode — connect a destination account to migrate data from this export.'
+              : 'Export only — no destination account connected. Migrate buttons are disabled.'}
+          </span>
           <button
             onClick={() => setStep('connect_destination')}
             className="rounded-md bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition-colors"
@@ -558,16 +609,23 @@ export function Dashboard() {
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-semibold text-foreground">claudexit dashboard</span>
+            {importMode && (
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                Import Mode
+              </span>
+            )}
           </div>
           <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground/60">
-            {sourceConnectResult?.org_id && (
-              <span>src: {truncate(sourceConnectResult.org_id, 20)}</span>
-            )}
-            {sourceConnectResult?.org_id && destConnectResult?.org_id && (
+            {importMode ? (
+              <span>src: local export</span>
+            ) : sourceConnectResult?.org_id ? (
+              <span>src: {accountLabel(sourceConnectResult)}</span>
+            ) : null}
+            {(importMode || sourceConnectResult?.org_id) && destConnectResult?.org_id && (
               <span className="text-border">→</span>
             )}
             {destConnectResult?.org_id && (
-              <span>dest: {truncate(destConnectResult.org_id, 20)}</span>
+              <span>dest: {accountLabel(destConnectResult)}</span>
             )}
           </div>
         </div>
@@ -681,10 +739,10 @@ export function Dashboard() {
                         subtitle={subtitleParts.join(' · ')}
                         metadata={project.created_at ? formatDate(project.created_at) : undefined}
                         destConnected={hasDest}
-                        actions={['Export', 'Migrate', 'Both']}
-                        onExport={() => handleExportProject(project)}
+                        actions={importMode ? (hasDest ? ['Migrate'] : []) : ['Export', 'Migrate', 'Both']}
+                        onExport={importMode ? undefined : () => handleExportProject(project)}
                         onMigrate={migrateOrPrompt(() => openProjectModal(project))}
-                        onBoth={async () => { await handleExportProject(project); if (hasDest) openProjectModal(project) }}
+                        onBoth={importMode ? undefined : async () => { await handleExportProject(project); if (hasDest) openProjectModal(project) }}
                         queueable
                         expandable
                         onExpand={() => fetchProjectDetail(project.uuid)}
@@ -730,10 +788,10 @@ export function Dashboard() {
                         subtitle={conv.summary ? truncate(conv.summary, 100) : undefined}
                         metadata={metaParts.join(' · ')}
                         destConnected={hasDest}
-                        actions={['Export', 'Migrate', 'Both']}
-                        onExport={() => handleExportConversation(conv)}
+                        actions={importMode ? (hasDest ? ['Migrate'] : []) : ['Export', 'Migrate', 'Both']}
+                        onExport={importMode ? undefined : () => handleExportConversation(conv)}
                         onMigrate={migrateOrPrompt(() => openConversationModal(conv))}
-                        onBoth={async () => { await handleExportConversation(conv); if (hasDest) openConversationModal(conv) }}
+                        onBoth={importMode ? undefined : async () => { await handleExportConversation(conv); if (hasDest) openConversationModal(conv) }}
                         queueable
                         expandable
                         onExpand={() => fetchConversationDetail(conv.uuid)}
@@ -805,6 +863,7 @@ export function Dashboard() {
         item={modal.item}
         dashboardData={dashboardData}
         onConfirm={handleModalConfirm}
+        bulkCount={modal.bulkKeys?.length}
       />
     </div>
   )

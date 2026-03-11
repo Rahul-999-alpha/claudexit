@@ -77,11 +77,11 @@ async def get_dashboard():
             pass
         await asyncio.sleep(0.2)
 
-    # Standalone conversations = those not belonging to any known project.
-    standalone_conversations = [
-        conv for conv in conversations
-        if conv.get("project_uuid") not in project_uuids
-    ]
+    # Standalone conversations = those not belonging to any known project (oldest first).
+    standalone_conversations = sorted(
+        [conv for conv in conversations if conv.get("project_uuid") not in project_uuids],
+        key=lambda c: c.get("created_at", ""),
+    )
 
     stats = DashboardStats(
         total_conversations=len(conversations),

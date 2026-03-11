@@ -11,16 +11,11 @@ interface HandoverConfirmOptions {
 interface HandoverModalProps {
   open: boolean
   onClose: () => void
-  mode: 'project' | 'conversation' | 'memory'
+  mode: 'project' | 'conversation' | 'memory' | 'bulk'
   item: DashboardProject | DashboardConversation | null
   dashboardData: DashboardResponse | null
   onConfirm: (opts: HandoverConfirmOptions) => void
-}
-
-function isConversation(
-  item: DashboardProject | DashboardConversation | null
-): item is DashboardConversation {
-  return item != null && 'summary' in item
+  bulkCount?: number
 }
 
 function buildDefaultTemplate(title: string): string {
@@ -31,27 +26,46 @@ Please acknowledge this continuation and pick up where we left off. Review the c
 Note: This conversation was migrated from a previous Claude account.`
 }
 
+function isConversation(
+  item: DashboardProject | DashboardConversation | null
+): item is DashboardConversation {
+  return item != null && 'summary' in item
+}
+
 export function HandoverModal({
   open,
   onClose,
   mode,
   item,
-  onConfirm
+  onConfirm,
+  bulkCount
 }: HandoverModalProps) {
   const [template, setTemplate] = useState('')
   const [includeFiles, setIncludeFiles] = useState(true)
   const [migrateConversations, setMigrateConversations] = useState(true)
+  const [loadingTemplate, setLoadingTemplate] = useState(false)
 
-  // Reset state whenever the modal opens with a new item
+  // Reset state and fetch enriched template whenever the modal opens
   useEffect(() => {
     if (open) {
-      if (mode === 'conversation' && isConversation(item)) {
-        setTemplate(buildDefaultTemplate(item.name || 'Untitled Conversation'))
-      } else {
-        setTemplate('')
-      }
       setIncludeFiles(true)
       setMigrateConversations(true)
+
+      if (mode === 'conversation' && isConversation(item)) {
+        // Fetch enriched template from backend
+        setLoadingTemplate(true)
+        setTemplate(buildDefaultTemplate(item.name || 'Untitled Conversation'))
+        fetch(`http://localhost:8020/api/migrate/handover-preview?conversation_uuid=${item.uuid}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => {
+            if (data?.template) setTemplate(data.template)
+          })
+          .catch(() => {})
+          .finally(() => setLoadingTemplate(false))
+      } else {
+        setTemplate('')
+        setLoadingTemplate(false)
+      }
     }
   }, [open, mode, item])
 
@@ -132,11 +146,12 @@ export function HandoverModal({
                 onChange={(e) => setTemplate(e.target.value)}
                 rows={7}
                 className="w-full resize-none rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none transition-colors"
-                placeholder="Enter a handover message..."
+                placeholder={loadingTemplate ? 'Loading enriched template...' : 'Enter a handover message...'}
               />
               <p className="text-[10px] text-muted-foreground/60">
-                This message is injected at the start of the migrated conversation to provide
-                context to Claude.
+                {loadingTemplate
+                  ? 'Fetching conversation context for a richer handover...'
+                  : 'This message is injected at the start of the migrated conversation to provide context to Claude. Edit as needed.'}
               </p>
             </div>
 
@@ -216,6 +231,60 @@ export function HandoverModal({
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
               >
                 Start Migration
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Bulk mode ── */}
+        {mode === 'bulk' && (
+          <>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Migrate Selected Items</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {bulkCount} item{bulkCount !== 1 ? 's' : ''} selected
+              </p>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Projects will be recreated with knowledge docs. Conversations will receive a
+              handover message. All items migrate in parallel.
+            </p>
+
+            <div className="flex flex-col gap-2.5">
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={migrateConversations}
+                  onChange={(e) => setMigrateConversations(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded accent-primary"
+                />
+                Migrate project conversations
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={includeFiles}
+                  onChange={(e) => setIncludeFiles(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded accent-primary"
+                />
+                Include uploaded files
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={onClose}
+                className="rounded-lg bg-secondary px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Migrate All
               </button>
             </div>
           </>

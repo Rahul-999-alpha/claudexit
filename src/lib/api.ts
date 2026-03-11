@@ -10,6 +10,7 @@ import type {
   MigrateConversationRequest,
   MigrateJobResponse,
   MigrateProgress,
+  MigrateHistoryResponse,
   FileCountsResponse,
   ConversationDetailResponse,
   ProjectDetailResponse,
@@ -63,6 +64,13 @@ export const api = {
       body: JSON.stringify({ output_dir: outputDir })
     }),
 
+  // ─── Import from export folder ─────────────────────────────────────────
+  importScan: (exportDir: string) =>
+    request<DashboardResponse>('/api/import/scan', {
+      method: 'POST',
+      body: JSON.stringify({ export_dir: exportDir })
+    }),
+
   // ─── v1.0.0 methods ──────────────────────────────────────────────────────
 
   connectDestination: (cookies: Record<string, string>) =>
@@ -93,6 +101,21 @@ export const api = {
 
   getMigrateStatus: (jobId: string) =>
     request<MigrateProgress>(`/api/migrate/status/${jobId}`),
+
+  getMigrateHistory: () =>
+    request<MigrateHistoryResponse>('/api/migrate/history'),
+
+  markMigrated: (itemKey: string, destUuid?: string) =>
+    request<{ ok: boolean }>('/api/migrate/mark', {
+      method: 'POST',
+      body: JSON.stringify({ item_key: itemKey, dest_uuid: destUuid ?? null })
+    }),
+
+  unmarkMigrated: (itemKey: string) =>
+    request<{ ok: boolean }>('/api/migrate/unmark', {
+      method: 'POST',
+      body: JSON.stringify({ item_key: itemKey })
+    }),
 
   getFileCounts: (uuids: string[]) =>
     request<FileCountsResponse>('/api/dashboard/file-counts', {

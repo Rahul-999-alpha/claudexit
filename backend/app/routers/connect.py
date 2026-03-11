@@ -64,6 +64,8 @@ async def connect():
     return ConnectResponse(
         status="connected",
         org_id=api.org_id,
+        account_email=api.account_email,
+        account_name=api.account_name,
         session_preview=cookies["sessionKey"][:15] + "...",
     )
 
@@ -94,6 +96,8 @@ async def connect_with_cookies(req: ConnectWithCookiesRequest):
     return ConnectResponse(
         status="connected",
         org_id=api.org_id,
+        account_email=api.account_email,
+        account_name=api.account_name,
         session_preview=cookies["sessionKey"][:15] + "...",
     )
 
@@ -127,5 +131,7 @@ async def connect_destination(req: ConnectWithCookiesRequest):
     return ConnectResponse(
         status="connected",
         org_id=api.org_id,
+        account_email=api.account_email,
+        account_name=api.account_name,
         session_preview=cookies["sessionKey"][:15] + "...",
     )

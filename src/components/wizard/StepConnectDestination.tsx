@@ -12,7 +12,7 @@ export function StepConnectDestination() {
     setLoadingBrowser(true)
     setError(null)
     try {
-      const cookies = await (window as any).electronAPI?.loginWithBrowser()
+      const cookies = await (window as any).electronAPI?.loginWithBrowser('destination')
       if (!cookies) {
         setError('Login window was closed before completing login.')
         return
@@ -82,7 +82,7 @@ export function StepConnectDestination() {
             <span className="text-sm font-medium">Connected</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            Organization: {destConnectResult.org_id}
+            {destConnectResult.account_email || destConnectResult.account_name || destConnectResult.org_id}
           </div>
           <div className="text-xs text-blue-400/70">
             Ready to write to this account

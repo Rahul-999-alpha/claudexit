@@ -3,6 +3,8 @@
 export interface ConnectResponse {
   status: 'connected' | 'error'
   org_id?: string
+  account_email?: string
+  account_name?: string
   session_preview?: string
   error?: string
 }
@@ -151,6 +153,22 @@ export interface MigrateProgress {
   errors: { item: string; error: string }[]
   result: Record<string, unknown>
 }
+
+// ─── Migration history (persistence) ────────────────────────────────────────
+
+export interface MigrateHistoryItem {
+  status: string
+  dest_uuid: string | null
+  timestamp: string
+}
+
+export interface MigrateHistoryResponse {
+  items: Record<string, MigrateHistoryItem>
+}
+
+// ─── Import from export folder ───────────────────────────────────────────────
+
+export type ImportScanResponse = DashboardResponse
 
 // ─── Per-item export request types ───────────────────────────────────────────
 

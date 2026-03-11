@@ -7,10 +7,15 @@ via a callback. Errors per sub-item are captured and do not abort the whole run.
 """
 
 import asyncio
-from typing import Callable, Awaitable
+import logging
+from typing import Callable, Awaitable, Any
 
 from app.services.claude_api import ClaudeAPI
 
+logger = logging.getLogger(__name__)
+
+# Source can be ClaudeAPI or ImportSource (duck-typed — same async read methods)
+SourceAPI = Any
 
 # ── Type alias ─────────────────────────────────────────────────────────────────
 
@@ -21,7 +26,7 @@ ProgressCB = Callable[[str, str, int, int], Awaitable[None]]
 # ── Memory migration ───────────────────────────────────────────────────────────
 
 async def migrate_global_memory(
-    source: ClaudeAPI,
+    source: SourceAPI,
     dest: ClaudeAPI,
     progress_cb: ProgressCB,
 ) -> dict:
@@ -47,7 +52,7 @@ async def migrate_global_memory(
         return {"controls_sent": 0}
 
     await progress_cb("memory", f"Writing {len(controls)} memory controls to destination...", 2, 3)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(1.0)
     await dest.set_memory_controls(controls)
 
     await progress_cb("memory", f"Global memory migrated ({len(controls)} controls).", 3, 3)
@@ -55,7 +60,7 @@ async def migrate_global_memory(
 
 
 async def migrate_project_memory(
-    source: ClaudeAPI,
+    source: SourceAPI,
     dest: ClaudeAPI,
     source_project_uuid: str,
     dest_project_uuid: str,
@@ -78,8 +83,12 @@ async def migrate_project_memory(
         return {"controls_sent": 0}
 
     await progress_cb("project_memory", f"Writing {len(controls)} project memory controls...", 2, 3)
-    await asyncio.sleep(0.3)
-    await dest.set_memory_controls(controls, project_uuid=dest_project_uuid)
+    await asyncio.sleep(1.0)
+    try:
+        await dest.set_memory_controls(controls, project_uuid=dest_project_uuid)
+    except Exception as e:
+        logger.error("Project memory controls failed for dest project %s: %s", dest_project_uuid, e)
+        raise
 
     await progress_cb("project_memory", f"Project memory migrated ({len(controls)} controls).", 3, 3)
     return {"controls_sent": len(controls)}
@@ -88,7 +97,7 @@ async def migrate_project_memory(
 # ── Project migration ──────────────────────────────────────────────────────────
 
 async def migrate_project(
-    source: ClaudeAPI,
+    source: SourceAPI,
     dest: ClaudeAPI,
     source_project: dict,
     migrate_conversations: bool,
@@ -122,7 +131,7 @@ async def migrate_project(
 
     # ── Step 1: Create project on destination ──────────────────────────────────
     await progress_cb("creating_project", f"Creating project '{project_name}'...", 0, 1)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(1.0)
     dest_project = await dest.create_project(name=project_name, description=description)
     dest_project_uuid = dest_project["uuid"]
     await progress_cb("creating_project", f"Project created: {dest_project_uuid}", 1, 1)
@@ -149,7 +158,7 @@ async def migrate_project(
                 i,
                 steps_total,
             )
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(1.0)
             await dest.add_project_doc(
                 project_uuid=dest_project_uuid,
                 file_name=file_name,
@@ -168,7 +177,7 @@ async def migrate_project(
     if docs_migrated > 0:
         try:
             await progress_cb("syncing_project", "Syncing project on destination...", 0, 1)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(1.0)
             await dest.sync_project(dest_project_uuid)
             await progress_cb("syncing_project", "Project synced.", 1, 1)
         except Exception as e:
@@ -198,11 +207,11 @@ async def migrate_project(
             )
             all_convs = []
 
-        # Filter to conversations belonging to this project
-        project_convs = [
-            c for c in all_convs
-            if c.get("project_uuid") == source_project_uuid
-        ]
+        # Filter to conversations belonging to this project, oldest first
+        project_convs = sorted(
+            [c for c in all_convs if c.get("project_uuid") == source_project_uuid],
+            key=lambda c: c.get("created_at", ""),
+        )
 
         total_convs = len(project_convs)
         for j, conv in enumerate(project_convs):
@@ -214,7 +223,9 @@ async def migrate_project(
                 total_convs,
             )
             try:
-                await asyncio.sleep(0.3)
+                # Generous delay between conversations — the completion endpoint is rate-limited
+                if j > 0:
+                    await asyncio.sleep(3.0)
                 result = await migrate_conversation(
                     source=source,
                     dest=dest,
@@ -249,7 +260,7 @@ async def migrate_project(
 # ── Conversation migration ─────────────────────────────────────────────────────
 
 async def migrate_conversation(
-    source: ClaudeAPI,
+    source: SourceAPI,
     dest: ClaudeAPI,
     source_conv: dict,
     handover_options,  # HandoverOptions
@@ -273,18 +284,25 @@ async def migrate_conversation(
     await progress_cb("fetching_conversation", f"Fetching full conversation: {conv_title[:60]}...", 0, 4)
     full_conv = await source.get_conversation(source_conv_uuid)
 
+    # Generate default handover template with conversation context if empty
+    template = handover_options.template
+    if not template:
+        template = build_handover_template(full_conv, conv_title)
+
     # ── Step 2: Create conversation on destination ────────────────────────────
+    source_model = full_conv.get("model")
     await progress_cb("creating_conversation", f"Creating conversation on destination...", 1, 4)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(1.0)
     dest_conv = await dest.create_conversation(
         title=conv_title,
         project_uuid=dest_project_uuid,
+        model=source_model,
     )
     dest_conv_uuid = dest_conv["uuid"]
 
     # ── Step 3: Upload files (if enabled) ─────────────────────────────────────
     files_migrated = 0
-    uploaded_file_uuids: list[str] = []
+    file_attachments: list[dict] = []
 
     if handover_options.include_files:
         file_infos = collect_files_from_conv(full_conv)
@@ -297,36 +315,47 @@ async def migrate_conversation(
                 2, 4,
             )
 
-        for file_info in file_infos:
+        for i, file_info in enumerate(file_infos):
             file_name = file_info.get("file_name", "attachment")
             try:
                 result = await source.download_file_best_variant(file_info)
                 if result is not None:
                     file_bytes, fname = result
-                    await asyncio.sleep(0.3)
-                    upload_result = await dest.upload_file_to_conversation(
+                    await asyncio.sleep(1.5)
+                    await progress_cb(
+                        "uploading_files",
+                        f"Uploading file {i + 1}/{total_files}: {fname}",
+                        2, 4,
+                    )
+                    attachment = await dest.upload_file_to_conversation(
                         conversation_uuid=dest_conv_uuid,
                         file_bytes=file_bytes,
                         file_name=fname,
                     )
-                    fuid = upload_result.get("file_uuid")
-                    if fuid:
-                        uploaded_file_uuids.append(fuid)
-                        files_migrated += 1
+                    file_attachments.append(attachment)
+                    files_migrated += 1
             except Exception as e:
+                detail = str(e)
+                if hasattr(e, "read"):
+                    try:
+                        detail = e.read().decode("utf-8", errors="replace")[:300]
+                    except Exception:
+                        pass
+                elif hasattr(e, "args") and len(e.args) > 0:
+                    detail = str(e.args[0])
                 await progress_cb(
                     "uploading_files",
-                    f"Warning: Could not migrate file '{file_name}' — {e}",
+                    f"Warning: Could not migrate file '{file_name}' — {detail}",
                     2, 4,
                 )
 
     # ── Step 4: Send handover message ─────────────────────────────────────────
     await progress_cb("sending_handover", "Sending handover message...", 3, 4)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(2.0)
     await dest.send_handover_message(
         conversation_uuid=dest_conv_uuid,
-        text=handover_options.template,
-        file_uuids=uploaded_file_uuids if uploaded_file_uuids else None,
+        text=template,
+        file_attachments=file_attachments if file_attachments else None,
     )
 
     await progress_cb(
@@ -342,6 +371,77 @@ async def migrate_conversation(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def build_handover_template(full_conv: dict, conv_title: str) -> str:
+    """Build a rich handover prompt from the full conversation data.
+
+    Includes: title, model, time range, summary, last messages (full text), and file list.
+    """
+    # ── Metadata ──
+    model = full_conv.get("model", "unknown")
+    summary = full_conv.get("summary", "")
+    messages = full_conv.get("chat_messages", [])
+
+    # Time range from first/last message
+    time_range = ""
+    if messages:
+        first_ts = messages[0].get("created_at", "")
+        last_ts = messages[-1].get("created_at", "")
+        if first_ts and last_ts:
+            # Just use date portion for readability
+            first_date = first_ts[:10] if len(first_ts) >= 10 else first_ts
+            last_date = last_ts[:10] if len(last_ts) >= 10 else last_ts
+            if first_date == last_date:
+                time_range = f"Date: {first_date}"
+            else:
+                time_range = f"Date range: {first_date} to {last_date}"
+
+    total_messages = len(messages)
+
+    # ── Build sections ──
+    parts = []
+
+    parts.append(f'[HANDOVER] Continuing conversation: "{conv_title}"')
+    parts.append(f"This conversation was migrated from a previous Claude account.\n")
+
+    # Info block
+    info_lines = [f"Model: {model}", f"Messages: {total_messages}"]
+    if time_range:
+        info_lines.append(time_range)
+    parts.append("\n".join(info_lines))
+
+    # Summary
+    if summary:
+        parts.append(f"Summary: {summary}")
+
+    # Last messages — full text, no truncation
+    last_msgs = extract_last_messages(full_conv, n=5)
+    if last_msgs:
+        msg_block = "--- Recent messages (last 5) ---\n"
+        for msg in last_msgs:
+            role_label = "Human" if msg["role"] == "human" else "Claude"
+            msg_block += f"\n{role_label}:\n{msg['text']}\n"
+        msg_block += "\n--- End of messages ---"
+        parts.append(msg_block)
+
+    # Files
+    file_infos = collect_files_from_conv(full_conv)
+    if file_infos:
+        file_names = [f.get("file_name", "unknown") for f in file_infos]
+        file_block = f"Attached files ({len(file_infos)} total):\n"
+        for fname in file_names[:20]:
+            file_block += f"  - {fname}\n"
+        if len(file_names) > 20:
+            file_block += f"  ... and {len(file_names) - 20} more"
+        parts.append(file_block)
+
+    parts.append(
+        "Please briefly summarize what you understand from this context "
+        "and confirm you are ready to continue."
+    )
+
+    return "\n\n".join(parts)
+
 
 def memory_text_to_controls(memory_text: str) -> list[str]:
     """Split memory text into individual control strings.

@@ -1,12 +1,19 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
 import { useWizardStore } from '@/stores/wizard'
-import { Loader2, CheckCircle2, XCircle, Download, Globe } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Download, Globe, FolderOpen } from 'lucide-react'
 
 export function StepConnectSource() {
-  const { sourceConnectResult, setSourceConnectResult, setStep } = useWizardStore()
+  const {
+    sourceConnectResult,
+    setSourceConnectResult,
+    setStep,
+    setDashboardData,
+    setImportMode
+  } = useWizardStore()
   const [loading, setLoading] = useState(false)
   const [loadingBrowser, setLoadingBrowser] = useState(false)
+  const [loadingImport, setLoadingImport] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleConnect = async () => {
@@ -31,7 +38,7 @@ export function StepConnectSource() {
     setLoadingBrowser(true)
     setError(null)
     try {
-      const cookies = await (window as any).electronAPI?.loginWithBrowser()
+      const cookies = await (window as any).electronAPI?.loginWithBrowser('source')
       if (!cookies) {
         setError('Login window was closed before completing login.')
         return
@@ -50,8 +57,31 @@ export function StepConnectSource() {
     }
   }
 
+  const handleImportFromFolder = async () => {
+    setLoadingImport(true)
+    setError(null)
+    try {
+      const dir = await window.electronAPI?.selectDirectory()
+      if (!dir) {
+        setLoadingImport(false)
+        return
+      }
+
+      const dashboardData = await api.importScan(dir)
+      setImportMode(true, dir)
+      setDashboardData(dashboardData)
+      // Skip connect_destination, go straight to dashboard
+      // User can connect destination later from the dashboard banner
+      setStep('connect_destination')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to scan export folder')
+    } finally {
+      setLoadingImport(false)
+    }
+  }
+
   const isConnected = sourceConnectResult?.status === 'connected'
-  const isLoading = loading || loadingBrowser
+  const isLoading = loading || loadingBrowser || loadingImport
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 pt-8">
@@ -81,6 +111,23 @@ export function StepConnectSource() {
             <Globe size={14} />
             Login with Browser
           </button>
+
+          <div className="mt-2 flex items-center gap-3 text-muted-foreground/40">
+            <div className="h-px w-12 bg-border" />
+            <span className="text-xs">or</span>
+            <div className="h-px w-12 bg-border" />
+          </div>
+
+          <button
+            onClick={handleImportFromFolder}
+            className="flex items-center gap-2 rounded-lg border border-border px-6 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <FolderOpen size={14} />
+            Import from Export Folder
+          </button>
+          <p className="max-w-xs text-center text-[10px] text-muted-foreground/50">
+            Use a previous claudexit export folder as the source for migration
+          </p>
         </div>
       )}
 
@@ -88,9 +135,11 @@ export function StepConnectSource() {
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 size={20} className="animate-spin" />
           <span className="text-sm">
-            {loadingBrowser
-              ? 'Waiting for browser login...'
-              : 'Detecting Claude Desktop and extracting session...'}
+            {loadingImport
+              ? 'Scanning export folder...'
+              : loadingBrowser
+                ? 'Waiting for browser login...'
+                : 'Detecting Claude Desktop and extracting session...'}
           </span>
         </div>
       )}
@@ -102,7 +151,7 @@ export function StepConnectSource() {
             <span className="text-sm font-medium">Connected</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            Organization: {sourceConnectResult.org_id}
+            {sourceConnectResult.account_email || sourceConnectResult.account_name || sourceConnectResult.org_id}
           </div>
           <div className="text-xs text-green-400/70">
             Ready to read from this account
@@ -132,6 +181,13 @@ export function StepConnectSource() {
               Login with Browser
             </button>
           </div>
+          <button
+            onClick={handleImportFromFolder}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <FolderOpen size={12} />
+            Import from Export Folder
+          </button>
         </div>
       )}
     </div>

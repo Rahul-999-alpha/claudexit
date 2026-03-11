@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Loader2, CheckCircle2, XCircle, Plus, Check, ChevronDown } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, Plus, Check, ChevronDown, BookmarkCheck, Undo2 } from 'lucide-react'
 import { useWizardStore } from '@/stores/wizard'
+import { api } from '@/lib/api'
 import type { ItemMigrationState } from '@/lib/types'
 
 // Stable fallback — same reference every call, so Zustand's Object.is check is stable
@@ -48,9 +49,29 @@ export function ItemCard({
 
   const [expanded, setExpanded] = useState(false)
 
+  const setMigrationState = useWizardStore((s) => s.setMigrationState)
+
   const isRunning = state.status === 'running'
   const isDone = state.status === 'done'
   const isFailed = state.status === 'failed'
+
+  const handleMarkMigrated = async () => {
+    try {
+      await api.markMigrated(itemKey)
+      setMigrationState(itemKey, { status: 'done' })
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleUnmark = async () => {
+    try {
+      await api.unmarkMigrated(itemKey)
+      setMigrationState(itemKey, { status: 'idle' })
+    } catch {
+      // ignore
+    }
+  }
 
   const borderClass = isRunning
     ? 'border-amber-500/30'
@@ -188,6 +209,25 @@ export function ItemCard({
               className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Both
+            </button>
+          )}
+          {/* Mark as Migrated (idle items) / Unmark (done items) */}
+          {!isRunning && !isDone && destConnected && (
+            <button
+              onClick={handleMarkMigrated}
+              title="Mark as already migrated"
+              className="rounded-md border border-border px-1.5 py-1 text-muted-foreground hover:text-green-400 hover:border-green-500/30 transition-colors"
+            >
+              <BookmarkCheck size={13} />
+            </button>
+          )}
+          {isDone && (
+            <button
+              onClick={handleUnmark}
+              title="Unmark — allow re-migration"
+              className="rounded-md border border-border px-1.5 py-1 text-muted-foreground hover:text-amber-400 hover:border-amber-500/30 transition-colors"
+            >
+              <Undo2 size={13} />
             </button>
           )}
         </div>

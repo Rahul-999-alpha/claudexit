@@ -31,11 +31,17 @@ interface WizardState {
   migrationStates: Record<string, ItemMigrationState>
   setMigrationState: (key: string, state: ItemMigrationState) => void
   getMigrationState: (key: string) => ItemMigrationState
+  loadPersistedHistory: (items: Record<string, { status: string; dest_uuid: string | null }>) => void
 
   // Active migration jobs (jobId -> MigrateProgress)
   activeJobs: Record<string, MigrateProgress>
   setJobProgress: (jobId: string, progress: MigrateProgress) => void
   clearJob: (jobId: string) => void
+
+  // Import mode
+  importMode: boolean
+  importDir: string | null
+  setImportMode: (mode: boolean, dir?: string | null) => void
 
   // Output dir for local exports
   outputDir: string
@@ -71,6 +77,15 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   setMigrationState: (key, state) =>
     set((s) => ({ migrationStates: { ...s.migrationStates, [key]: state } })),
   getMigrationState: (key) => get().migrationStates[key] ?? { status: 'idle' },
+  loadPersistedHistory: (items) => {
+    const states: Record<string, ItemMigrationState> = {}
+    for (const [key, val] of Object.entries(items)) {
+      if (val.status === 'done') {
+        states[key] = { status: 'done', destUuid: val.dest_uuid ?? undefined }
+      }
+    }
+    set((s) => ({ migrationStates: { ...s.migrationStates, ...states } }))
+  },
 
   activeJobs: {},
   setJobProgress: (jobId, progress) =>
@@ -81,6 +96,10 @@ export const useWizardStore = create<WizardState>((set, get) => ({
       delete activeJobs[jobId]
       return { activeJobs }
     }),
+
+  importMode: false,
+  importDir: null,
+  setImportMode: (importMode, dir = null) => set({ importMode, importDir: dir ?? null }),
 
   outputDir: '',
   setOutputDir: (outputDir) => set({ outputDir }),
@@ -114,6 +133,8 @@ export const useWizardStore = create<WizardState>((set, get) => ({
       dashboardLoading: false,
       migrationStates: {},
       activeJobs: {},
+      importMode: false,
+      importDir: null,
       outputDir: '',
       selectedItems: []
     })
