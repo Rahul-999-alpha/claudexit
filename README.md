@@ -2,25 +2,31 @@
 
 Export and migrate your Claude Desktop conversations, projects, knowledge files, memory, and uploaded files.
 
-Available as both a **desktop app** (wizard-style GUI) and a **CLI script**.
+Available as both a **desktop app** (dashboard GUI) and a **CLI script**.
 
 ## Desktop App
 
-A polished Electron + React + FastAPI desktop app with a 5-step wizard. Designed for general Claude users who want a dead-simple one-click export experience.
+An Electron + React + FastAPI desktop app with an interactive dashboard. Designed for general Claude users who want full control over their data — browse, select, export, and migrate individual items or everything at once.
 
 ### Features
 
-- **One-click export** — Automatically detects your Claude Desktop installation and extracts session cookies
+- **Dashboard view** — Browse all your projects and conversations in an interactive, expandable card-based dashboard
+- **Per-item export** — Export individual conversations or projects with a folder picker
+- **Selective file picking** — Preview files attached to conversations and deselect the ones you don't need
+- **Batch export** — Select multiple items and export them all at once
+- **Select All** — Per-section (Projects, Conversations) and global Select All with a selection queue sidebar
+- **Project viewer** — Expand project cards to see memory, knowledge docs, and conversations inline
+- **Conversation viewer** — Expand conversation cards to see messages and attached files
+- **Account-to-account migration** — Connect a source and destination account, then migrate memory, projects, and conversations
+- **Auto-detect cookies** — Automatically extracts session cookies from your Claude Desktop installation via DPAPI
 - **Browser login fallback** — If auto-detect fails, log in through a browser window instead
-- **Full account export** — Conversations, projects, knowledge documents, memory, and uploaded files
-- **Live progress** — Real-time WebSocket progress tracking during export
 - **Multiple formats** — Export as JSON, Markdown, or both
-- **Migration prompt** — Generate a self-contained prompt to recreate your account structure on a new Claude instance
-- **Wizard UX** — 5-step guided flow: Connect, Preview, Configure, Export, Done
+- **Live progress** — Real-time WebSocket progress tracking during export and migration
+- **Legacy wizard mode** — Full-account export with the original 5-step wizard (Connect, Preview, Configure, Export, Done)
 
 ### Quick Start (Desktop)
 
-**From installer:** Download the latest `claudexit Setup x.x.x.exe` from [Releases](https://github.com/Rahul-999-alpha/claudexit/releases), install, and run.
+**From installer:** Download the latest `claudexit.Setup.x.x.x.exe` from [Releases](https://github.com/Rahul-999-alpha/claudexit/releases), install, and run.
 
 **From source:**
 ```bash
@@ -44,12 +50,16 @@ Electron 34 (main process)
   ├── FastAPI backend (subprocess, port 8020)
   │   ├── DPAPI cookie extraction
   │   ├── Async Claude API client (urllib)
-  │   ├── Export pipeline with progress callbacks
-  │   └── WebSocket streaming
+  │   ├── Dashboard data aggregation
+  │   ├── Per-item + batch export pipeline
+  │   ├── Account-to-account migration
+  │   └── WebSocket progress streaming
   └── React 18 frontend (Vite)
-      ├── 5-step wizard UI
+      ├── Dashboard with expandable cards
+      ├── Selection queue sidebar
+      ├── Per-item export with file picker
       ├── Zustand state management
-      └── WebSocket progress hook
+      └── WebSocket progress hooks
 ```
 
 ### Tech Stack
@@ -142,10 +152,14 @@ claude_export/
 
 ## Account Migration
 
-claudexit can generate a migration prompt that helps recreate your account setup on a new Claude account.
+claudexit supports two migration approaches:
 
-1. **Export** your current account (via desktop app or `--export`)
-2. **Generate** the migration prompt (via desktop app or `--migrate`)
+### 1. Direct migration (Desktop app, v1.0.0+)
+Connect both source and destination Claude accounts. Then migrate individual items — memory, projects, or conversations — directly from one account to the other through the dashboard.
+
+### 2. Migration prompt (Desktop app or CLI)
+1. **Export** your current account
+2. **Generate** the migration prompt
 3. **Open** `MIGRATION_PROMPT.md` and paste it into your new Claude account
 
 The migration prompt includes your memory, project structure, knowledge document contents, and conversation summaries.
@@ -158,7 +172,7 @@ The migration prompt includes your memory, project structure, knowledge document
 | Conversations (all messages) | Yes | Full message history with metadata |
 | Projects (metadata) | Yes | Name, description, timestamps |
 | Project knowledge docs | Yes | Full markdown content |
-| Uploaded files (PDFs, images) | Yes | Downloaded as original files |
+| Uploaded files (PDFs, images) | Yes | Downloaded as original files. Selectable per-conversation in desktop app |
 | Thinking/reasoning blocks | Yes | Can exclude with `--no-thinking` or toggle in desktop app |
 | File attachments metadata | Yes | File names, types, UUIDs |
 | Conversation summaries | Yes | Auto-generated summaries |
@@ -198,7 +212,7 @@ The migration prompt includes your memory, project structure, knowledge document
 
 ## Security Notes
 
-- The script reads your Claude session cookie to make API calls. The cookie is only used locally and is not transmitted anywhere except to `claude.ai`.
+- The app reads your Claude session cookie to make API calls. The cookie is only used locally and is not transmitted anywhere except to `claude.ai`.
 - Exported data may contain sensitive conversation content. Store exports securely.
 - No credentials or cookies are written to the export directory.
 
